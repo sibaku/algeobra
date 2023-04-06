@@ -7264,16 +7264,16 @@ class DefMidPoint {
             assertExistsAndNotOptional(obj);
 
             // Allow for computing the midpoint of a set of points
-            if (obj instanceof Array) {
+            if (Array.isArray(obj)) {
                 let x = 0;
                 let y = 0;
 
                 let n = 0;
                 for (let i = 0; i < obj.length; i++) {
                     const oi = obj[i];
-                    if (obj.type === TYPE_POINT) {
-                        x += obj.x;
-                        y += obj.y;
+                    if (oi.type === TYPE_POINT) {
+                        x += oi.x;
+                        y += oi.y;
                         n++;
                     } else {
                         throw new Error(`MidPoint of array defined for points only`);
