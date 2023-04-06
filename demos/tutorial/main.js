@@ -1,5 +1,5 @@
 
-import * as demos from "./tutorial.js";
+import * as tuts from "./tutorial.js";
 
 import {
     makeCanvas, makeContainer,
@@ -8,11 +8,12 @@ import {
 document.body.onload = () => {
 
     const dm = [
+        tuts.controllableRectangle,
     ];
 
     for (const d of dm) {
         const canvas = makeCanvas(400, 400);
-        canvas.classList.add("demoCanvas");
+        canvas.classList.add("tutCanvas");
         const con = makeContainer(canvas);
         document.body.appendChild(con);
         d(con, canvas);
