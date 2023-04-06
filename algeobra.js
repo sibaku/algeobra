@@ -4888,7 +4888,7 @@ class DefRefraction {
      * @param {{x:Number, y:Number}} n The normal
      * @param {Number} eta The ratio of refractive indices. 
      * Will be inverted, if the incoming direction points into the same half space as the normal
-     * @returns {{x:Number, y:Number}} The refracted vector. In case of total internal reflection, this will be the zero vector
+     * @returns {{x:Number, y:Number} | null} The refracted vector. In case of total internal reflection, null will be returned
      */
     static refractVector(i, n, eta) {
         n = Object.assign({}, n);
@@ -4908,7 +4908,7 @@ class DefRefraction {
         //     R = eta * I - (eta * dot(N, I) + sqrt(k)) * N;
         const k = 1.0 - eta * eta * (1.0 - dotni * dotni);
         if (k < 0.0) {
-            return { x: 0, y: 0 };
+            return null;
         } else {
             return vSub(
                 vScale(i, eta),
@@ -4951,6 +4951,10 @@ class DefRefraction {
                 ref = refn;
             }
             let r = DefRefraction.refractVector(v, n, eta);
+
+            if (!r) {
+                return INVALID;
+            }
 
             if (normalize) {
                 r = vNormalizeIfNotZero(r);
