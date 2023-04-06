@@ -50,3 +50,17 @@ The full function reference can be found here: [sibaku.github.io/docs/algeobra](
 More information (WIP) can be found in the Wiki [Wiki](https://github.com/sibaku/algeobra/wiki).
 
 Demos to use as reference can be found in the demo branch [Demo branch](https://github.com/sibaku/algeobra/tree/demos).
+
+## Tutorials
+
+Tutorial code can be found in the demo branch in [tutorial code](https://github.com/sibaku/algeobra/tree/demos/demos/tutorial).
+
+You will need a local server to open the HTML/load the module files. If you just want to have a look, JSFiddle versions are listed below, so you can look at it directly in the browser.
+
+The following shows a list of the current tutorials that you can find in the code
+
+### An adjustable rectangle with side lengths
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/bk7h84gy/)
+
+<img src="../assets/img/tut_rect.gif" alt="Adjustable rectangle" width="50%"></img>
