@@ -5115,11 +5115,16 @@ class DefNumber {
     /**
      * Create a number by computing the value of a given function and a parameter
      * @param {function(Number)} f The function f(x) to compute
-     * @param {Number | Object} x Either the index or value of a TYPE_NUMBER. The parameter to f
+     * @param {Number | Object | Number[] || Object[]} x Either the indices or values of a TYPE_NUMBER. The parameters to f
      * @returns {CreateInfo} The creation info
      */
     static fromFunc(f, x) {
-        return CreateInfo.new("f", { x }, { f });
+        if (Array.isArray(x)) {
+            return CreateInfo.new("f", x, { f });
+        } else {
+            return CreateInfo.new("f", [x], { f });
+
+        }
     }
     /**
      * Creates the number
@@ -5150,9 +5155,17 @@ class DefNumber {
             const { x } = dependencies;
             const { f } = params;
             assertExistsAndNotOptional(x);
-            assertType(x, TYPE_NUMBER);
 
-            value = f(x.value);
+            if (!Array.isArray(x)) {
+                throw new Error("Expected array");
+            }
+            let paramsX = [];
+            for (let n of x) {
+                assertType(n, TYPE_NUMBER);
+                paramsX.push(n.value);
+            }
+
+            value = f(...paramsX);
         } else if (createInfo !== EMPTY_INFO) {
             throw new Error("No suitable constructor");
         }
@@ -5690,19 +5703,8 @@ class DefText {
 class DefAngle {
 
     /**
-     * Creates an angle from two objects that can each be either lines or vectors.
-     * The reference point is placed where the infinitl lines through the objects intersect
-     * @param {Number | Object} v0 Either the index or value of one of the types [TYPE_VECTOR, TYPE_LINE]
-     * @param {Number | Object} v1 Either the index or value of one of the types [TYPE_VECTOR, TYPE_LINE]
-     * @returns {CreateInfo} The creation info
-     */
-    static fromVectorsOrLines(v0, v1) {
-        return CreateInfo.new("vl", { v0, v1 });
-    }
-
-    /**
-     * When computing an angle, if it is greater than Pi (180°), choose the opposite one
-     */
+        * When computing an angle, if it is greater than Pi (180°), choose the opposite one
+        */
     static USE_SMALLER_ANGLE = -1;
     /**
      * When computing an angle choose it
@@ -5712,6 +5714,22 @@ class DefAngle {
      * When computing an angle, if it is smaller than Pi (180°), choose the opposite one
      */
     static USE_LARGER_ANGLE = 1;
+
+    /**
+     * Creates an angle from two objects that can each be either lines or vectors.
+     * The reference point is placed where the infinitl lines through the objects intersect
+     * @param {Number | Object} v0 Either the index or value of one of the types [TYPE_VECTOR, TYPE_LINE]
+     * @param {Number | Object} v1 Either the index or value of one of the types [TYPE_VECTOR, TYPE_LINE]
+     * @param {Number} [useAngle] One of the values DefAngle.(USE_SMALLER_ANGLE, USE_COMPUTED_ANGLE, USE_LARGER_ANGLE)
+     * @returns {CreateInfo} The creation info
+     */
+    static fromVectorsOrLines(v0, v1, useAngle = DefAngle.USE_COMPUTED_ANGLE) {
+        return CreateInfo.new("vl", { v0, v1 }, {
+            useAngle
+        });
+    }
+
+
 
     /**
      * Creates an angle from three points. The angle is measured around the middle one.
@@ -5793,7 +5811,28 @@ class DefAngle {
             const a = orientedAngle(d0, d1);
             const start = orientedAngle({ x: 1, y: 0 }, d0);
 
-            return makeAngle({ value: a, start, ref: inter });
+            let a0 = start;
+            let a1 = a0 + a;
+
+            if (a1 < a0) {
+                a1 += 2 * Math.PI;
+            }
+
+            const { useAngle } = params;
+            const adif = a1 - a0;
+            if (useAngle === DefAngle.USE_SMALLER_ANGLE) {
+                // angle is > 180° -> use the other side
+                if (adif > Math.PI) {
+                    [a0, a1] = [a1, a0];
+                }
+            } else if (useAngle === DefAngle.USE_LARGER_ANGLE) {
+                // angle is < 180° -> use other side
+                if (adif < Math.PI) {
+                    [a0, a1] = [a1, a0];
+                }
+            }
+
+            return makeAngle({ value: (a1 - a0), start: a0, ref: inter });
 
         } else if (createInfo.name === "ppp") {
             const { p0, p1, p2 } = dependencies;
