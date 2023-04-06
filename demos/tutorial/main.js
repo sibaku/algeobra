@@ -10,6 +10,7 @@ document.body.onload = () => {
     const dm = [
         tuts.controllableRectangle,
         tuts.reflectionRefraction,
+        tuts.pythagoras,
     ];
 
     for (const d of dm) {

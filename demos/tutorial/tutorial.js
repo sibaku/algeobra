@@ -481,7 +481,240 @@ function reflectionRefraction(container, canvas) {
     container.appendChild(makeContainer(makeTextField("\u03b7\u2082: "), slider1));
 }
 
+function pythagoras(container, canvas) {
+    // get some fields for easier writing 
+    const {
+        DefPoint,
+        DefBoolean,
+        DefPolygon,
+        DefConditional,
+        DefLine,
+        DefVector,
+        DefMidPoint,
+        DefText,
+        DefNormalVector,
+        DefPerpendicularLine,
+        DefIntersection,
+        DefChainApply,
+        DefNumber,
+        DefFunc,
+        DefLength,
+        DefAngle,
+        DefSelectByKey,
+        makePoint,
+    } = alg;
+
+    // in this demo we will simply draw the famous visualization of the pythagoras theorem
+    // we will mainly show like a general map function approach to define a bunch of similar stuff
+
+    // create a new scene
+    const scene = new alg.GeometryScene();
+
+    // this is the diagram we will draw into
+    // it is a predefined class to display a scene on a HTML canvas
+    // we pass in the min/max corners of the coordinate system viewport that we want to see
+    // we will flip y, as otherwise there might be some confusion when defining directions due to the canvas being a left-handed system
+    const diagram = new vis.DiagramCanvas({ x0: -4, y0: -4, x1: 4, y1: 4, flipY: true, canvas });
+    // this object will take care of drawing/redrawing our scene when anything changes
+    // we don't use a background
+    // we also let the painter take care of resizing the canvas to fill out the screen and adjusting the diagram accordingly
+    const diagPainter = new vis.DiagramPainter(scene, diagram, {
+        bg: vis.NO_BACKGROUND_CONFIG,
+        autoResize: {
+            target: container,
+            keepAspect: false,
+            minWidth: canvas.width,
+            widthFactor: 0.8,
+        }
+    });
+
+    // you can set the "invisible" field in the properties of an object. The drawing operation will then not draw this object
+    // that way, we can hide intermediate objects that are just used for construction
+    // we use this variable, so we can very easily toggle showing these objects, which is useful for debugging
+    const invisible = true;
+
+    // the triangle points
+    // draw them in front and larger to signify they can be moved
+    const p0 = scene.add(new DefPoint(-1, -1), EMPTY_INFO, {
+        z: -2, style: {
+            r: 8,
+            fillStyle: "rgb(128,128,128)",
+        }
+    });
+    const p2 = scene.add(new DefPoint(1, 1), EMPTY_INFO, {
+        z: -2, style: {
+            r: 8,
+            fillStyle: "rgb(128,128,128)",
+        }
+    });
+
+    const vecX = scene.add(new DefVector({ x: 1, y: 0 }), DefVector.fromRefVector({ ref: p0 }), { invisible });
+    //  compute the middle point as the intersection of the x axis through p0 and y through p2
+    const lineX = scene.add(new DefLine({ leftOpen: true, rightOpen: true }), DefLine.fromVector(vecX), { invisible });
+    const lineY = scene.add(new DefPerpendicularLine(), DefPerpendicularLine.fromVectorsOrLine({ v: lineX, ref: p2 }), { invisible });
+    const p1 = scene.add(new DefIntersection(), DefIntersection.fromObjects(lineX, lineY, { takeIndex: 0 }), { invisible });
+
+    const points = [p0, p1, p2];
+
+    // show angle
+    // we will replace the text with a simple dot to represent the right angle
+    const rightAngle = scene.add(new DefAngle(), DefAngle.fromPoints(p0, p1, p2, DefAngle.USE_SMALLER_ANGLE), {
+        style: {
+            r: 30,
+            arc: {
+                showDirection: false,
+                fillStyle: "rgba(128,128,128,0.5)",
+            },
+            text: {
+                radius: 0.5,
+                textStyle: {
+                    font: "20px bold sans-serif",
+                    textAlign: "center",
+                },
+                transform: () => ".",
+            }
+        }
+    });
+
+    // we want the user to be able to move these points
+    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, diagram.canvas,
+        [p0, p2], 40);
+
+    // make a polygon to display the triangle
+    // draw it on top
+    const tri = scene.add(new DefPolygon(), DefPolygon.fromPoints(points), {
+        z: -1,
+        style: {
+            fillStyle: "rgba(0,0,0,0)",
+            strokeStyle: "rgb(0,0,0)",
+            lineStyle: {
+                lineWidth: 4,
+            }
+        }
+    });
+
+
+    // compute the orientation of the triangle
+    // as the user may move around points, this  could invert the order of points and make normals point inwards
+    // the nice solution for that is computing the signed area with: sum_i x_i y_{i+1} - x_{i+1} y_i
+    // we disregard the half factor here, as we don't need it
+    const isCCW = scene.add(new DefBoolean(), DefBoolean.fromPredicate(
+        deps => {
+            let sum = 0;
+            for (let i = 0; i < deps.length; i++) {
+                const ip = (i + 1) % deps.length;
+                const pi = deps[i];
+                const pip = deps[ip];
+
+                sum += pi.x * pip.y - pip.x * pi.y;
+            }
+            return sum >= 0;
+        },
+        points
+    ));
+
+    // to make it easy, we calculate two sets of normals, one set pointing inwards, one outwards
+    // then we select one depending on the value of isCCW
+    // we could also define a function instead that does this all in one
+    // The normals are calculated as a counter clockwise rotation, so for a CCW triangle, we need to use the inverted one
+    const normalsCW = points.map(
+        (v, i) => scene.add(
+            new DefNormalVector({ normalize: true }),
+            DefNormalVector.fromPoints({ ref: v, p0: v, p1: points[(i + 1) % points.length] }),
+            { invisible }));
+    const normalsCCW = points.map(
+        (v, i) => scene.add(
+            new DefNormalVector({ normalize: true }),
+            DefNormalVector.fromPoints({ ref: v, p0: points[(i + 1) % points.length], p1: v }),
+            { invisible, }));
+
+    // a conditional defines objects based on some criteria
+    // in this case, we select the outward pointing normal based on the isCCW boolean value
+    const normals = normalsCCW.map((v, i) => scene.add(
+        new DefConditional(),
+        DefConditional.fromEitherOr(v, normalsCW[i], isCCW),
+        { invisible }
+    ));
+
+    // compute the lengths of the sides
+    const sideLengths = points.map((v, i) => scene.add(new DefLength(), DefLength.fromPoints(v, points[(i + 1) % points.length]), {}));
+
+    // create the boxes
+    // we could create a bunch of points, but we will use a chain definition here to see how that works
+    // basically we do the following steps:
+    // input: sidepoints p0,p1, sidenormal n, sidelength len -> DefFunc: create the 4 vertices and pass them to a DefPolygon
+
+    // we will add some different colors
+    const boxColors = [
+        "255,0,0",
+        "0,0,255",
+        "255,0,255",
+    ];
+    // chain apply will go through each given function and call its compute field or the object itself, if it is a function
+    // the result of one in the chain will be passed to the next one
+    // initially, the given creation info is put in
+    const boxes = points.map((v, i) => scene.add(
+        new DefChainApply(
+            new DefFunc(deps => {
+                const { p0, p1, n, len } = deps;
+                // we could also have computed the 
+                const p2 = Vec2.add(p0, Vec2.scale(n, len.value));
+                const p3 = Vec2.add(p1, Vec2.scale(n, len.value));
+
+                // creation info for a polygon
+                // here we can see, that we can create the info structure directly with values, while we are in the compute part
+                return DefPolygon.fromPoints([p0, makePoint({ x: p2.x, y: p2.y }), makePoint({ x: p3.x, y: p3.y }), p1]);
+            }),
+            new DefPolygon(),
+        ),
+        DefFunc.from({ p0: v, p1: points[(i + 1) % points.length], n: normals[i], len: sideLengths[i] }),
+        {
+            style: {
+                fillStyle: `rgba(${boxColors[i]}, 0.25)`,
+                strokeStyle: `rgb(${boxColors[i]})`,
+                lineStyle: {
+                    lineWidth: 2,
+                }
+            }
+        }
+    ));
+
+    // extract the box polygon points to compute their centers
+    // we can extract fields from a value with the DefSelect definition
+    const pointArrays = boxes.map(v => scene.add(
+        new DefSelectByKey("points"), DefSelectByKey.fromObject(v), { invisible }
+    ));
+
+    // DefMidpoint can take in an array value made of points
+    const centers = pointArrays.map(v => scene.add(
+        new DefMidPoint(), DefMidPoint.fromObject(v), { invisible }
+    ));
+
+    // create areas
+    const areas = sideLengths.map(v => scene.add(new DefNumber(), DefNumber.fromFunc(x => x * x, v)));
+
+    // create text
+    const texts = centers.map((v, i) => scene.add(
+        new DefText(),
+        DefText.fromObjectRef({ obj: areas[i], ref: v }),
+        {
+            style: {
+                strokeStyle: "rgb(255,255,255)",
+                outline: {
+                    lineWidth: 6,
+                },
+                textStyle: {
+                    font: "20px sans-serif",
+                    textAlign: "center",
+                    textBaseline: "middle",
+                },
+            }
+        }
+    ));
+}
+
 export {
     controllableRectangle,
-    reflectionRefraction
+    reflectionRefraction,
+    pythagoras,
 };
