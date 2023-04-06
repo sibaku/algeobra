@@ -61,6 +61,6 @@ The following shows a list of the current tutorials that you can find in the cod
 
 ### An adjustable rectangle with side lengths
 
-JSFiddle version of the code: [Fiddle](https://jsfiddle.net/bk7h84gy/)
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/bk7h84gy/1/)
 
 <img src="../assets/img/tut_rect.gif" alt="Adjustable rectangle" width="50%"></img>
