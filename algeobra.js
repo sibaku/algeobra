@@ -5115,7 +5115,7 @@ class DefNumber {
     /**
      * Create a number by computing the value of a given function and a parameter
      * @param {function(Number)} f The function f(x) to compute
-     * @param {Number | Object | Number[] || Object[]} x Either the indices or values of a TYPE_NUMBER. The parameters to f
+     * @param {Number | Object | Number[] | Object[]} x Either the indices or values of a TYPE_NUMBER. The parameters to f
      * @returns {CreateInfo} The creation info
      */
     static fromFunc(f, x) {
@@ -5152,17 +5152,17 @@ class DefNumber {
             }
 
         } else if (createInfo.name === "f") {
-            const { x } = dependencies;
             const { f } = params;
-            assertExistsAndNotOptional(x);
 
-            if (!Array.isArray(x)) {
+            if (!Array.isArray(dependencies)) {
                 throw new Error("Expected array");
             }
             let paramsX = [];
-            for (let n of x) {
-                assertType(n, TYPE_NUMBER);
-                paramsX.push(n.value);
+            for (let x of dependencies) {
+                assertExistsAndNotOptional(x);
+
+                assertType(x, TYPE_NUMBER);
+                paramsX.push(x.value);
             }
 
             value = f(...paramsX);
