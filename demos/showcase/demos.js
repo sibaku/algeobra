@@ -5,7 +5,7 @@ import * as vis from "../../algeobraCanvas.js";
 
 import {
     makeCanvas, makeCheckbox, makeContainer, makeTextField, makeSlider,
-} from "./common.js";
+} from "../common.js";
 
 // As Liascript removes elements on page turn, we will detach everything when it gets removed
 function onRemoved(element, callback) {

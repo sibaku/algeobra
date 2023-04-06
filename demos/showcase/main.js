@@ -3,7 +3,7 @@ import * as demos from "./demos.js";
 
 import {
     makeCanvas, makeContainer,
-} from "./common.js";
+} from "../common.js";
 
 document.body.onload = () => {
 
