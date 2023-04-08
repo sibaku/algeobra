@@ -5363,7 +5363,8 @@ class DefCurveParam {
         return CreateInfo.new("curve", {
             curve, p
         }, {
-            eps
+            eps,
+            takeIndex,
         });
     }
     /**
@@ -5439,10 +5440,13 @@ class DefCurveParam {
      * Computes the parameter of a point on a line. 
      * @param {Object} line The line object
      * @param {{x:Number, y :Number}} p The point
-     * @param {Number} eps The epsilon value used for comparisons
+     * @param {Object} params
+     * @param {Number} [params.eps] The epsilon value used for comparisons
+     * @param {Number} [params.minT] The minimum t value
+     * @param {Number} [params.maxT] The maximum t value
      * @returns {Number[]} The possible t values
      */
-    static lineParam(line, p, eps = 1E-10) {
+    static lineParam(line, p, { eps = 1E-10, minT = 0, maxT = 1 } = {}) {
 
         let { p0, p1 } = line;
         const v = vSub(p1, p0);
@@ -5457,7 +5461,7 @@ class DefCurveParam {
 
 
         const t = calcParamOnLine(p0, p1, p);
-        if (t < 0 || t > 1) {
+        if (t < minT || t > maxT) {
             return [];
         }
 
@@ -5592,7 +5596,11 @@ class DefCurveParam {
         } else if (type === TYPE_ELLIPSE) {
             return DefCurveParam.ellipseParam(obj, p);
         } else if (type === TYPE_LINE) {
-            return DefCurveParam.lineParam(obj, p, eps);
+            return DefCurveParam.lineParam(obj, p, {
+                eps,
+                minT: obj.leftOpen ? -Infinity : 0,
+                maxT: obj.rightOpen ? Infinity : 1
+            });
         } else if (type === TYPE_VECTOR) {
             return DefCurveParam.vectorParam(obj, p, eps);
         } else if (type === TYPE_LINE_STRIP) {
@@ -9629,7 +9637,7 @@ export {
     DefNumber,
     DefBoolean,
     DefConditional,
-    DefCurveParam as DefParamOnCurve,
+    DefCurveParam,
     DefText,
     DefAngle,
     DefPolarCoord,
@@ -9650,7 +9658,7 @@ export {
     DefArcLength,
     DefLengthSquared,
     DefLength,
-    DefSelect as DefSelectByKey,
+    DefSelect,
     DefChainApply,
     DefMap,
     DefArc,
