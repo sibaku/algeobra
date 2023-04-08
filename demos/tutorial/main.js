@@ -11,6 +11,7 @@ document.body.onload = () => {
         tuts.controllableRectangle,
         tuts.reflectionRefraction,
         tuts.pythagoras,
+        tuts.sat,
     ];
 
     for (const d of dm) {

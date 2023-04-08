@@ -500,7 +500,7 @@ function pythagoras(container, canvas) {
         DefFunc,
         DefLength,
         DefAngle,
-        DefSelectByKey,
+        DefSelect,
         makePoint,
     } = alg;
 
@@ -682,7 +682,7 @@ function pythagoras(container, canvas) {
     // extract the box polygon points to compute their centers
     // we can extract fields from a value with the DefSelect definition
     const pointArrays = boxes.map(v => scene.add(
-        new DefSelectByKey("points"), DefSelectByKey.fromObject(v), { invisible }
+        new DefSelect("points"), DefSelect.fromObject(v), { invisible }
     ));
 
     // DefMidpoint can take in an array value made of points
@@ -713,8 +713,398 @@ function pythagoras(container, canvas) {
     ));
 }
 
+function sat(container, canvas) {
+    // get some fields for easier writing 
+    const {
+        DefPoint,
+        DefLine,
+        DefVector,
+        DefPerpendicularLine,
+        DefIntersection,
+        DefPolygon,
+        DefText,
+        DefArc,
+        DefClosestPoint,
+        DefCurveParam,
+        DefFunc,
+        DefSelect,
+        DefCurvePoint,
+        DefBoolean,
+        DefConditional,
+        makeNumber,
+        makeVector,
+        INVALID,
+    } = alg;
+
+    // in this demo we will create  demo showing how the principle of the separating axis theorem (SAT) works
+
+
+    // create a new scene
+    const scene = new alg.GeometryScene();
+
+    // this is the diagram we will draw into
+    // it is a predefined class to display a scene on a HTML canvas
+    // we pass in the min/max corners of the coordinate system viewport that we want to see
+    const diagram = new vis.DiagramCanvas({ x0: -3, y0: -3, x1: 3, y1: 3, flipY: true, canvas });
+    // this object will take care of drawing/redrawing our scene when anything changes
+    // we don't use a background
+    // we also let the painter take care of resizing the canvas to fill out the screen and adjusting the diagram accordingly
+    const diagPainter = new vis.DiagramPainter(scene, diagram, {
+        bg: vis.NO_BACKGROUND_CONFIG,
+        autoResize: {
+            target: container,
+            keepAspect: false,
+            minWidth: canvas.width / 2,
+            widthFactor: 0.8,
+        }
+    });
+
+    // you can set the "invisible" field in the properties of an object. The drawing operation will then not draw this object
+    // that way, we can hide intermediate objects that are just used for construction
+    // we use this variable, so we can very easily toggle showing these objects, which is useful for debugging
+    const invisible = true;
+
+    // we create two input polygons. 
+    // we could also do arcs or ellipses, but that would make it a bit more complex here, so for this tutorial we stay with polygons
+    // SAT is defined for convex shapes, so we have multiple options:
+    // 1. Only triangles, they are always convex
+    // 2. Use more than 3 vertices and allow the user to make concave shapes to explore the fail case. (we could also visualize that this case is false)
+    // 3. Use more than 3 vertices and always use the convex cull (convex hull is a library function)
+
+    // we choose option 2 here, as the others require a bit more code, but we listed the others to give you an idea
+    // create polygon p points
+    const pPointProps = {
+        z: -1,
+        style: {
+            fillStyle: "rgb(255,0,0)",
+        }
+    };
+    const p0 = scene.add(new DefPoint(0.5, -1), EMPTY_INFO, pPointProps);
+    const p1 = scene.add(new DefPoint(1, -1), EMPTY_INFO, pPointProps);
+    const p2 = scene.add(new DefPoint(1, 1), EMPTY_INFO, pPointProps);
+    const p3 = scene.add(new DefPoint(0.5, 1), EMPTY_INFO, pPointProps);
+    const p4 = scene.add(new DefPoint(0, 0), EMPTY_INFO, pPointProps);
+
+    const pointsP = [p0, p1, p2, p3, p4];
+    // polygon
+    const p = scene.add(new DefPolygon(), DefPolygon.fromPoints(pointsP), {
+        style: {
+            strokeStyle: "rgb(255,0,0)",
+            fillStyle: "rgba(255,0,0,0.25)",
+        }
+    });
+
+    // create polygon q points
+    const qPointProps = {
+        z: -1,
+        style: {
+            fillStyle: "rgb(0,0,255)",
+        }
+    };
+    const q0 = scene.add(new DefPoint(-1.5, -0.5), EMPTY_INFO, qPointProps);
+    const q1 = scene.add(new DefPoint(-0.5, -0.5), EMPTY_INFO, qPointProps);
+    const q2 = scene.add(new DefPoint(-0.5, 1), EMPTY_INFO, qPointProps);
+
+    const pointsQ = [q0, q1, q2];
+    const q = scene.add(new DefPolygon(), DefPolygon.fromPoints(pointsQ), {
+        style: {
+            fillStyle: "rgba(0,0,255,0.25)",
+            strokeStyle: "rgb(0,0,255)",
+        }
+    });
+
+
+    // the points will get projected onto a plane, but we don't want a fixed plane
+    // we will use a basic circular handle to move around the surrounding plane
+
+    const origin = scene.add(new DefPoint(0, 0), EMPTY_INFO, { invisible });
+    // the movement circle
+    const handleCircle = scene.add(new DefArc({ r: 2 }), DefArc.fromValues({ center: origin }), {
+        style: {
+            strokeStyle: "rgba(128,128,128,0.25)",
+            outline: {
+                lineWidth: 2,
+                lineDash: [4],
+            }
+        }
+    });
+    // the point that we actually move
+    const handlePoint = scene.add(new DefPoint(0, 4), EMPTY_INFO, { invisible });
+    // the point that we handle
+    const circlePoint = scene.add(new DefClosestPoint(), DefClosestPoint.fromObject(handlePoint, handleCircle), {
+        style: {
+            r: 6,
+            fillStyle: "rgb(0,0,0)",
+        }
+    });
+
+    // we now define the manipulation code
+    // here, we have a slightly more complicated setup, where only one point is split between handle and move
+    // we will just create the [reference,handle] pairs for all points, where both points are the same for the polygons
+    const handleMoves = [[circlePoint, handlePoint]];
+    [...pointsP, ...pointsQ].forEach(v => handleMoves.push([v, v]));
+
+    const manip = vis.PointManipulator.createForPointsAndHandles(scene, diagram.coordinateMapper, diagram.canvas, handleMoves, 40);
+
+    // we will now create a the line at our circle point
+    // for that, we use the radius vector from the circle center to the handle point and attach a perpendicular line
+    const dir = scene.add(new DefVector(), DefVector.fromPoints(origin, circlePoint), { invisible });
+
+    // move the projection plane a bit further away, so the movement circle is visible
+    const dirScaled = scene.add(new DefFunc(deps => {
+        const { v } = deps;
+        const vs = Vec2.scale(v, 1.2);
+        return makeVector({ x: vs.x, y: vs.y, ref: v.ref });
+    }), DefFunc.from({ v: dir }), { invisible });
+    const planePoint = scene.add(new DefPoint(), DefPoint.fromPointOrVector(dirScaled), { invisible });
+
+    const projectionPlane = scene.add(new DefPerpendicularLine(),
+        DefPerpendicularLine.fromVectorsOrLine({ v: dir, ref: planePoint }),
+        {
+            style: {
+                lineStyle: {
+                    lineWidth: 2,
+                }
+            }
+        });
+
+    // we can now project all points onto the plane
+    // first, we construct rays in the dir direction through each triangle point and then intersect those with the projection plane
+
+    // helper function
+    const makeLines = p => scene.add(
+        new DefLine({ rightOpen: true }),
+        DefLine.fromPointVector(p, dir),
+        {
+            style: {
+                strokeStyle: "rgba(0,0,0,0.5)",
+                lineStyle: {
+                    lineDash: [2],
+                }
+            }
+        });
+
+    const linesP = pointsP.map(makeLines);
+    const linesQ = pointsQ.map(makeLines);
+
+    // intersection helper
+    const makeIntersect = (l, props) => scene.add(
+        new DefIntersection(),
+        DefIntersection.fromObjects(l, projectionPlane, { takeIndex: 0 }), props
+    );
+
+    const projP = linesP.map(l => makeIntersect(l, { style: { r: 3, fillStyle: "rgb(255,0,0)", } }));
+    const projQ = linesQ.map(l => makeIntersect(l, { style: { r: 3, fillStyle: "rgb(0,0,255)", } }));
+
+    // for each of the points, we will compute its parameter on the projection plane
+    // this could be relative to any point on the plane, so we can just use an inbuilt curve parameter definition
+    // for a line, this will be with respect to the defining points
+
+    const computeParams = p => scene.add(
+        new DefCurveParam(),
+        DefCurveParam.fromCurve(projectionPlane, p, { takeIndex: 0 })
+    );
+
+    const paramsP = projP.map(computeParams);
+    const paramsQ = projQ.map(computeParams);
+
+    // we will now find the minimum and maximum for each set
+    // for that we will again define a helper function to be used in a general DefFunc
+    const computeParamBounds = deps => {
+        let tmin = Infinity;
+        let tmax = -Infinity;
+
+        // we assume the parameters are passed in as an array
+        for (let tn of deps) {
+            // parameters are numbers
+            const t = tn.value;
+            tmin = Math.min(tmin, t);
+            tmax = Math.max(tmax, t);
+        }
+
+        return [tmin, tmax].map(t => makeNumber(t));
+    };
+
+    const boundsP = scene.add(new DefFunc(computeParamBounds), DefFunc.from(paramsP));
+    const boundsQ = scene.add(new DefFunc(computeParamBounds), DefFunc.from(paramsQ));
+
+    // these are both two element array, so we take the first and second element to get min/max
+    const minP = scene.add(new DefSelect(0), DefSelect.fromObject(boundsP));
+    const maxP = scene.add(new DefSelect(1), DefSelect.fromObject(boundsP));
+
+    const minQ = scene.add(new DefSelect(0), DefSelect.fromObject(boundsQ));
+    const maxQ = scene.add(new DefSelect(1), DefSelect.fromObject(boundsQ));
+
+    // create points from the min max parameters
+    // these points are the bounds of the projection line
+    // since we used the inbuilt param function, we can revert those to get the actual points
+    const minPointP = scene.add(new DefCurvePoint(), DefCurvePoint.fromCurve({ obj: projectionPlane, t: minP }), { invisible });
+    const maxPointP = scene.add(new DefCurvePoint(), DefCurvePoint.fromCurve({ obj: projectionPlane, t: maxP }), { invisible });
+
+    const minPointQ = scene.add(new DefCurvePoint(), DefCurvePoint.fromCurve({ obj: projectionPlane, t: minQ }), { invisible });
+    const maxPointQ = scene.add(new DefCurvePoint(), DefCurvePoint.fromCurve({ obj: projectionPlane, t: maxQ }), { invisible });
+
+    // we can now draw a line between each boundary point
+    const lineProjP = scene.add(new DefLine(), DefLine.fromPoints(minPointP, maxPointP), {
+        style: {
+            strokeStyle: "rgba(255,0,0,0.5)",
+            lineStyle: {
+                lineWidth: 12,
+            }
+        }
+    });
+
+    const lineProjQ = scene.add(new DefLine(), DefLine.fromPoints(minPointQ, maxPointQ), {
+        style: {
+            strokeStyle: "rgba(0,0,255,0.5)",
+            lineStyle: {
+                lineWidth: 12,
+            }
+        }
+    });
+
+    // due to the alpha values, we can see, when the projected areas overlap, but we want to make it explicit
+    // for that, we first create a predicate, that computes, whether the two parameter ranges overlap
+
+    const doOverlap = scene.add(new DefBoolean(), DefBoolean.fromPredicate(deps => {
+        const { rangeP, rangeQ } = deps;
+
+        // the overlap check is just a 1D circle!
+        const minP = rangeP[0].value;
+        const maxP = rangeP[1].value;
+        const minQ = rangeQ[0].value;
+        const maxQ = rangeQ[1].value;
+
+        const centerP = (maxP + minP) * 0.5;
+        const rP = (maxP - minP) * 0.5;
+
+        const centerQ = (maxQ + minQ) * 0.5;
+        const rQ = (maxQ - minQ) * 0.5;
+
+        // distance between the centers
+        const d = Math.abs(centerP - centerQ);
+        // combined radii
+        const r = rP + rQ;
+
+        // the 1D circles don't overlap, if their combined radii is less than the distance between the circles
+        return r - d >= 1E-7;
+    }, { rangeP: boundsP, rangeQ: boundsQ }));
+
+    // we use two kinds of texts and display one according to the condition
+    const textNoOverlap = scene.add(new DefText({ text: "No overlap", ref: { x: -2.5, y: -2.5 } }), EMPTY_INFO, { invisible });
+    const textOverlap = scene.add(new DefText({ text: "Overlap", ref: { x: -2.5, y: -2.5 } }), EMPTY_INFO, { invisible });
+
+    const textDoOverlap = scene.add(new DefConditional(),
+        DefConditional.fromEitherOr(textOverlap, textNoOverlap, doOverlap),
+        {
+            style: {
+                strokeStyle: "rgb(255,255,255)",
+                outline: {
+                    lineWidth: 4,
+                },
+                textStyle: {
+                    font: "20px bold sans-serif",
+                }
+            }
+        });
+
+    // we will explicitly highlight a separation axis
+    // the axis will go through the middle of the free bound region
+    // this computation is very similar to the one to detect overlap
+    // in this case, it will find the mean parameter
+    // we will only define this point, if no overlap exists
+    const midOverlapParameter = scene.add(new DefFunc(deps => {
+        const { rangeP, rangeQ, doOverlap } = deps;
+        if (doOverlap.value) {
+            return INVALID;
+        }
+
+        // the overlap check is just a 1D circle!
+        const minP = rangeP[0].value;
+        const maxP = rangeP[1].value;
+        const minQ = rangeQ[0].value;
+        const maxQ = rangeQ[1].value;
+
+        const centerP = (maxP + minP) * 0.5;
+        const rP = (maxP - minP) * 0.5;
+
+        const centerQ = (maxQ + minQ) * 0.5;
+        const rQ = (maxQ - minQ) * 0.5;
+
+        return makeNumber(0.5 * (centerP + centerQ) + 0.5 * (rP - rQ) * (centerP <= centerQ ? 1 : -1));
+    }), DefFunc.from({ rangeP: boundsP, rangeQ: boundsQ, doOverlap }));
+
+    const midOverlapPoint = scene.add(new DefCurvePoint(), DefCurvePoint.fromCurve({ obj: projectionPlane, t: midOverlapParameter }), { invisible });
+
+    // place the separating plane
+    const sepPlane = scene.add(new DefPerpendicularLine(), DefPerpendicularLine.fromVectorsOrLine({ v: projectionPlane, ref: midOverlapPoint }), {
+        style: {
+            strokeStyle: "rgba(255,0,255,0.5)",
+            lineStyle: {
+                lineWidth: 4,
+            },
+        }
+    });
+
+
+    // we will create a simple feedback to show whether the quadrilateral is convex or concave
+    // SAT only works with convex objects
+
+    // there are efficient tests, but we will only implement a not so efficient but conceptually simple test here
+    // in a convex polygon, each edge is part of the convex hull and all other points lie inside (or not outside) of the edge
+    // depending on how the user orders the points, the object may become clockwise or counter clockwise, so we just use the first edge to determine the sign
+
+    const isConvex = scene.add(new DefBoolean(), DefBoolean.fromPredicate(points => {
+        // go through all n edges
+        // for each edge, check that the remaining n-2 points are on one side
+        const n = points.length;
+
+        for (let i = 0; i < n; i++) {
+            const p0 = points[i];
+            const p1 = points[(i + 1) % n];
+            const d = Vec2.sub(p1, p0);
+            const norm = Vec2.normal2D(d);
+            // get sign of first non edge point
+            // we know that our polygon has at least 3 points
+            // this algorithm handles arbitrary polygons
+            let q = Vec2.sub(points[(i + 2) % n], p0);
+            const s0 = Vec2.dot(norm, q) >= -1E-10 ? 1 : -1;
+
+            for (let j = 1; j < n - 2; j++) {
+                q = Vec2.sub(points[(i + 2 + j) % n], p0);
+                let s = Vec2.dot(norm, q) >= -1E-10 ? 1 : -1;
+                if (s * s0 < 0) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }, pointsP));
+
+    // we will only display this, if the first shape is concave
+    const textConvave = scene.add(new DefText({ text: "Red shape is concave!\nSAT only works for convex shapes!", ref: { x: 0, y: -2.5 } }), EMPTY_INFO, { invisible });
+
+    // we negate the isConvex predicate
+    const isConcave = scene.add(new DefBoolean(), DefBoolean.fromNot(isConvex));
+
+    const displayConcave = scene.add(new DefConditional(), DefConditional.fromCondition(textConvave, isConcave), {
+        style: {
+            fillStyle: "rgb(255,0,0)",
+            strokeStyle: "rgb(255,255,255)",
+            outline: {
+                lineWidth: 4,
+            },
+            textStyle: {
+                font: "15px bold sans-serif",
+            }
+        }
+    });
+}
+
 export {
     controllableRectangle,
     reflectionRefraction,
     pythagoras,
+    sat
 };
