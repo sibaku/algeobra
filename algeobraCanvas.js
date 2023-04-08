@@ -1320,9 +1320,22 @@ class DiagramCanvas {
         this.#applyLineStyle(outline);
         this.#applyFontStyle(textStyle);
 
-        ctx.beginPath();
-        ctx.strokeText(text, x, y);
-        ctx.fillText(text, x, y);
+        // split lines
+        const lines = text.split("\n");
+
+        const metrics = ctx.measureText(text);
+        let lineHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+        if (!this.flipY) {
+            lineHeight *= -1;
+        }
+
+        for (let l of lines) {
+            ctx.beginPath();
+            ctx.strokeText(l, x, y);
+            ctx.fillText(l, x, y);
+            y += lineHeight;
+        }
+
         ctx.restore();
     }
 
