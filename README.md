@@ -73,6 +73,12 @@ JSFiddle version of the code: [Fiddle](https://jsfiddle.net/8xbf130z/3/)
 
 ### Pythagoras
 
-JSFiddle version of the code: [Fiddle](https://jsfiddle.net/oc57jbkz/)
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/xrmhjovc/)
 
 <img src="../assets/img/pythag.gif" alt="Pythagoras" width="50%"></img>
+
+### Separating axis theorem (SAT)
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/t486v2do/)
+
+<img src="../assets/img/sat.gif" alt="SAT" width="50%"></img>
