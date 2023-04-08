@@ -9658,7 +9658,7 @@ export {
     DefArcLength,
     DefLengthSquared,
     DefLength,
-    DefSelect as DefSelectByKey,
+    DefSelect,
     DefChainApply,
     DefMap,
     DefArc,
