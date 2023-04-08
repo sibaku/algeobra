@@ -71,3 +71,8 @@ JSFiddle version of the code: [Fiddle](https://jsfiddle.net/8xbf130z/3/)
 
 <img src="../assets/img/reflect_refract.gif" alt="Adjustable rectangle" width="50%"></img>
 
+### Pythagoras
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/oc57jbkz/)
+
+<img src="../assets/img/pythag.gif" alt="Pythagoras" width="50%"></img>
