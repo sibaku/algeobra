@@ -1837,7 +1837,7 @@ function demoLens(container, canvas) {
         DefIntersection,
         DefPolarVector,
         DefNumber,
-        DefSelectByKey,
+        DefSelect,
         DefPolarCoord,
         DefNormalVector,
         DefRefraction,
@@ -1878,14 +1878,14 @@ function demoLens(container, canvas) {
 
 
     const circleInter0 = scene.add(
-        new DefSelectByKey(0),
-        DefSelectByKey.fromObject(intersectCircles),
+        new DefSelect(0),
+        DefSelect.fromObject(intersectCircles),
         {
             invisible
         });
     const circleInter1 = scene.add(
-        new DefSelectByKey(1),
-        DefSelectByKey.fromObject(intersectCircles),
+        new DefSelect(1),
+        DefSelect.fromObject(intersectCircles),
         {
             invisible
         });
