@@ -957,6 +957,96 @@ function deCastlejau(points, t) {
     return points[0];
 }
 
+/**
+ * Creates two new sets of control points, such that the left set creates the given Bezier curve up to the parameter t, while the right set creates the rest of the original curve.
+ * @param {{Array<{x:Number, y:Number}>}} points The control points
+ * @param {Number} t The curve parameter
+ * @returns {{left: Array<{x:Number, y:Number}>, right: Array<{x:Number, y:Number}>}} The subdivided curve control points
+ */
+function subdivideBezierControlPoints(points, t) {
+    // to override values
+    points = [...points];
+    if (points.length === 1) {
+        return { left: points, right: points };
+    }
+    const left = [points[0]];
+    const right = [points[points.length - 1]];
+    const n = points.length - 1;
+    for (let j = 1; j <= n; j++) {
+        for (let i = 0; i <= n - j; i++) {
+            points[i] = vLerp(points[i], points[i + 1], t);
+        }
+        left.push(points[0]);
+        right.push(points[n - j]);
+    }
+
+    return { left, right: right.reverse() };
+}
+
+/**
+ * Subdivides a Bezier curve in such a way, that the points can be drawn as line segments that do not differ more from the curve than the given error parameter
+ * @param {{Array<{x:Number, y:Number}>}} points The Bezier control points
+ * @param {Number} [eps] Subdivision error parameter
+ * @returns {{Array<{x:Number, y:Number}>}} The subdivided curve
+ */
+function subdivideBezierAdaptive(points, eps = 1) {
+    if (points.length < 3) {
+        return points;
+    }
+    const queue = [[points, 0, 1]];
+    // we always draw the first point and each subdivision only adds its end
+    const output = [points[0]];
+
+    const eps2 = eps * eps;
+    while (queue.length > 0) {
+        const [p, tmin, tmax] = queue.pop();
+
+        // check, if curve can be approximated by a line
+        const p0 = p[0];
+        // last point
+        const pn = p[p.length - 1];
+        const v = Vec2.sub(pn, p0);
+        // we use the formulation dist^2 =  (q - p0)^2 - ((q-p0)* v)^2
+        // here, v is normalized and the formulat follows from the pythagorean theorem, with the point distances being the hypotenuse, and the projection (second term) being tone of the sides, with the distance being the other
+        // if v is zero and we just leave it as it is, then the second term will be zero and the formula reduces to a point distance
+        const vn = Vec2.normalizeIfNotZero(v);
+
+        let isLinear = true;
+        for (let i = 1; i < p.length - 1; i++) {
+            const q = p[i];
+            const qp0 = Vec2.sub(q, p0);
+            const proj = Vec2.dot(qp0, v);
+            // point may lie outside of line interval, but is still on the infinite line
+            if (proj < 0 || proj > 1) {
+                isLinear = false;
+                break;
+            }
+
+            // else check distance
+            const d2 = Vec2.len2(qp0) - proj * proj;
+            if (d2 > eps2) {
+                isLinear = false;
+                break;
+            }
+        }
+
+        if (isLinear) {
+            // can be approximated by a line
+            // we only output the final point, since we already processed the beginning
+            output.push(pn);
+        } else {
+            // subdivide
+            const tmid = (tmin + tmax) * 0.5;
+            const { left, right } = subdivideBezierControlPoints(p, tmid);
+            // push right interval first, so left one is computed earlier
+            queue.push([right, tmid, tmax]);
+            queue.push([left, tmin, tmid]);
+        }
+
+    }
+
+    return output;
+}
 
 /**
  * Creates a Boolean type object of type TYPE_BOOLEAN
@@ -9567,6 +9657,8 @@ export {
     calcBezierParameterOfPoint,
     calcBezierPointsDerivative,
     deCastlejau,
+    subdivideBezierControlPoints,
+    subdivideBezierAdaptive,
     makeBoolean,
     makeNumber,
     makePoint,
