@@ -24,18 +24,14 @@ import {
     TYPE_BEZIER,
     TYPE_BEZIER_SPLINE,
     TYPE_TEXT,
-
     DefPoint,
     GeometryScene,
-
     rad2deg,
-
     intersectLines,
-
     assertType,
-
     Vec2 as v2,
     createFromTemplate,
+    subdivideBezierAdaptive,
 } from "./algeobra.js";
 
 /**
@@ -1015,6 +1011,8 @@ class DiagramCanvas {
         this.coordinateMapper = new CoordinateMapper({
             x0, y0, x1, y1, flipY, width: canvas.width, height: canvas.height,
         });
+
+        this.subdivisionThreshold = 4;
     }
 
     /**
@@ -1619,10 +1617,10 @@ class DiagramCanvas {
      * @param {Object} style 
      */
     drawBezier(points, style = {}) {
-
-        if (points.length > 4) {
-            throw new Error(`Drawing bezier curves only supported up to cubics, got ${points.length - 1}`);
+        if (points.length < 2) {
+            throw new Error(`Bezier curve must have degree of at least 1`);
         }
+
         style = createFromTemplate(styles.geo.line, style);
 
         let {
@@ -1643,7 +1641,6 @@ class DiagramCanvas {
         const pointsScreen = points.map(v => cMap.convertLocalToSurface(v.x, v.y));
 
         ctx.beginPath();
-
         if (pointsScreen.length === 2) {
             // just a line
             const [p0, p1] = pointsScreen;
@@ -1661,6 +1658,16 @@ class DiagramCanvas {
             // quadratic curve
             ctx.moveTo(p0.x, p0.y);
             ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+        } else {
+            // create subdivision curve
+            // error metric is adjustable, but can go down to a pixel
+            const eps = Math.max(1, this.subdivisionThreshold);
+            const pointsSub = subdivideBezierAdaptive(pointsScreen, eps);
+            ctx.moveTo(pointsSub[0].x, pointsSub[0].y);
+            for (let i = 1; i < pointsSub.length; i++) {
+                const pi = pointsSub[i];
+                ctx.lineTo(pi.x, pi.y);
+            }
         }
 
         ctx.stroke();
@@ -1676,10 +1683,6 @@ class DiagramCanvas {
     drawBezierSpline(points, degree, style = {}) {
         if (degree < 1) {
             throw new Error(`Drawing bezier curves only supported starting from degree 1, got ${degree}`);
-        }
-
-        if (degree > 3) {
-            throw new Error(`Drawing bezier curves only supported up to cubics, got ${degree}`);
         }
 
         // check for correct number of points
@@ -1724,6 +1727,21 @@ class DiagramCanvas {
                 const [p1, p2, p3] = [pointsScreen[i], pointsScreen[i + 1], pointsScreen[i + 2]];
                 // cubic curve
                 ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+            }
+            else {
+                const subPoints = [];
+                for (let j = 0; j <= degree; j++) {
+                    subPoints.push(pointsScreen[i - 1 + j]);
+                }
+                // create subdivision curve
+                // error metric is adjustable, but can go down to a pixel
+                const eps = Math.max(1, this.subdivisionThreshold);
+                const pointsSub = subdivideBezierAdaptive(subPoints, eps);
+                // move already done by previous segment/first point
+                for (let i = 1; i < pointsSub.length; i++) {
+                    const pi = pointsSub[i];
+                    ctx.lineTo(pi.x, pi.y);
+                }
             }
         }
 

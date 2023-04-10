@@ -64,3 +64,21 @@ The following shows a list of the current tutorials that you can find in the cod
 JSFiddle version of the code: [Fiddle](https://jsfiddle.net/bk7h84gy/1/)
 
 <img src="../assets/img/tut_rect.gif" alt="Adjustable rectangle" width="50%"></img>
+
+### Reflection and refraction
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/8xbf130z/3/)
+
+<img src="../assets/img/reflect_refract.gif" alt="Adjustable rectangle" width="50%"></img>
+
+### Pythagoras
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/xrmhjovc/)
+
+<img src="../assets/img/pythag.gif" alt="Pythagoras" width="50%"></img>
+
+### Separating axis theorem (SAT)
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/t486v2do/)
+
+<img src="../assets/img/sat.gif" alt="SAT" width="50%"></img>
