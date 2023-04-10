@@ -1102,9 +1102,125 @@ function sat(container, canvas) {
     });
 }
 
+function smoothFunction(container, canvas) {
+    // get some fields for easier writing 
+    const {
+        DefNumber,
+        DefFunc,
+        DefBezierSpline,
+        makePoint,
+    } = alg;
+
+    // in this demo we will display a smooth sine curve by computing a number of sample points and then displaying them using a Catmull-Rom spline
+
+    // create a new scene
+    const scene = new alg.GeometryScene();
+
+    // this is the diagram we will draw into
+    // it is a predefined class to display a scene on a HTML canvas
+    // we pass in the min/max corners of the coordinate system viewport that we want to see
+    // we will flip y, as otherwise there might be some confusion when defining directions due to the canvas being a left-handed system
+    const diagram = new vis.DiagramCanvas({ x0: 0, y0: -2, x1: 2 * Math.PI, y1: 2, flipY: true, canvas });
+    // this object will take care of drawing/redrawing our scene when anything changes
+    // we draw a basic background, since we are drawing a funcion
+    const diagPainter = new vis.DiagramPainter(scene, diagram, {
+        bg: vis.BASIC_BACKGROUND_CONFIG,
+        autoResize: {
+            target: container,
+            keepAspect: false,
+            minWidth: canvas.width,
+            widthFactor: 0.8,
+        },
+    });
+
+    // we create a time variable for the sine function, so it can change
+    const t = scene.add(new DefNumber(0));
+
+    // amplitude
+    const a = scene.add(new DefNumber(1));
+
+    // set a number of subsampling points
+    const n = scene.add(new DefNumber(20));
+
+    const sinePoints = scene.add(new DefFunc(deps => {
+        const { t, n, a } = deps;
+        const tv = t.value;
+        const nv = n.value;
+        const av = a.value;
+        const points = [];
+        for (let i = 0; i < nv; i++) {
+            const ox = (i / (nv - 1)) * 2 * Math.PI;
+            const x = (i / (nv - 1) + tv) * 2 * Math.PI;
+            const s = Math.sin(x) * av;
+            points.push(makePoint({ x: ox, y: s }));
+        }
+        return points;
+    }), DefFunc.from({ t, n, a }));
+
+    const spline = scene.add(new DefBezierSpline(), DefBezierSpline.fromCatmullRom(sinePoints), {
+        style: {
+            lineStyle: {
+                lineWidth: 2,
+            },
+        }
+    });
+
+    // simple time update
+    const dt = 1 / 40;
+    const update = () => {
+        const tv = scene.get(t).value.value;
+        scene.update(t, new DefNumber(tv + dt * 0.5));
+        setTimeout(update, dt * 1000);
+
+    };
+    setTimeout(update, dt * 1000);
+
+    // add slider to adjust sample points and amplitude
+    // finally we will add two sliders to influence the values of eta0 and eta1
+    const mapFrom = (v, min, max) => (v - min) / (max - min);
+    const mapTo = (v, min, max) => v * (max - min) + min;
+    // create the slider by getting the current eta values and mapping it between 0 and 100 
+    // (integer slider values avoid some issues with decimal step sizes)
+    const minA = 0;
+    const maxA = 2;
+
+    const minN = 3;
+    const maxN = 50;
+    // we can get all data associated with an object with scene.get
+    const slider0 = makeSlider(0, 100, mapTo(mapFrom(scene.get(a).value.value, minA, maxA), 0, 100));
+    const slider1 = makeSlider(minN, maxN, scene.get(n).value.value);
+
+    slider0.oninput = () => {
+        // convert slider value into [0,1]
+        const t = mapFrom(parseInt(slider0.value), parseInt(slider0.min), parseInt(slider0.max));
+        const an = mapTo(t, minA, maxA);
+
+        // when updating a value, we can't use scene.add, as this would create a new object
+        // we could use scene.set, but this is discouraged in this situation, as it completely resets the object and dependencies
+        // especially dependencies are an issue, since the have to be recalculated along the chain
+        // to avoid that, there is the method: scene.update
+        // in general, the structure of a scene will not change, so dependencies are fixed
+        // if a value has to be updated, we will just do that and not touch any dependencies (aside from them getting updated)
+
+        scene.update(a, new DefNumber(an));
+    };
+
+    slider1.oninput = () => {
+        // this is easier, since we have integer inputs
+        // just set n
+        const nv = parseInt(slider1.value);
+        scene.update(n, new DefNumber(nv));
+    };
+
+    container.appendChild(makeContainer(makeTextField("Amplitude: "), slider0));
+    container.appendChild(makeContainer(makeTextField("#Samples: "), slider1));
+
+}
+
 export {
     controllableRectangle,
     reflectionRefraction,
     pythagoras,
-    sat
+    sat,
+    smoothFunction,
 };

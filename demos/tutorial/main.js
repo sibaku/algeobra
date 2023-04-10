@@ -12,6 +12,7 @@ document.body.onload = () => {
         tuts.reflectionRefraction,
         tuts.pythagoras,
         tuts.sat,
+        tuts.smoothFunction,
     ];
 
     for (const d of dm) {
