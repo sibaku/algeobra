@@ -7760,6 +7760,37 @@ class DefBezier {
     static fromPointArray(pointArray, attach = false) {
         return CreateInfo.new("pa", { pointArray }, { attach });
     }
+
+    /**
+     * Computes a Cubic Hermite Bezier curve
+     * @param {Number | Object} p0 Either the index or value of an array of points of type TYPE_POINT. The point array
+     * @param {Number | Object} t0 Either the index or value of an array of points of type TYPE_VECTOR. The point array
+     * @param {Number | Object} p1 Either the index or value of an array of points of type TYPE_POINT. The point array
+     * @param {Number | Object} t1 Either the index or value of an array of points of type TYPE_VECTOR. The point array
+     * @returns {CreateInfo} The creation info
+     */
+    static fromHermite(p0, t0, p1, t1) {
+        return CreateInfo.new("hm", { p0, t0, p1, t1 });
+
+    }
+
+    /**
+     * Converts a hermite to a Bezier curve
+     * @param {{x:Number, y:Number}} p0 The first point
+     * @param {{x:Number, y:Number}} t0 The first tangent
+     * @param {{x:Number, y:Number}} p1 The second point
+     * @param {{x:Number, y:Number}} t1 The second tangent
+     * @returns {Array<{x:Number, y:Number}>} The equivalent cubic Bezier control points
+     */
+    static hermiteToCubic(p0, t0, p1, t1) {
+        const q0 = p0;
+        const q1 = Vec2.add(p0, Vec2.scale(t0, 1.0 / 3.0));
+        const q2 = Vec2.sub(p1, Vec2.scale(t1, 1.0 / 3.0));
+        const q3 = p1;
+
+        return [q0, q1, q2, q3];
+    }
+
     /**
      * Computes the Bezier curve
      * @param {CreateInfo} createInfo The creation info
@@ -7797,6 +7828,16 @@ class DefBezier {
             } else {
                 points = pointArray;
             }
+        } else if (createInfo.name === "hm") {
+
+            const { p0, t0, p1, t1 } = dependencies;
+            assertExistsAndNotOptional(p0, t0, p1, t1);
+            assertType(p0, TYPE_POINT);
+            assertType(t0, TYPE_VECTOR);
+            assertType(p1, TYPE_POINT);
+            assertType(t1, TYPE_VECTOR);
+
+            points = DefBezier.hermiteToCubic(p0, t0, p1, t1);
         } else if (createInfo !== EMPTY_INFO) {
             throw new Error("No suitable constructor");
         }
@@ -7813,10 +7854,10 @@ class DefBezierSpline {
     /**
      * Default value
      * @param {Object} params
-     * @param {Array<{x:Number, y:Number}>} params.points An array of control points
-     * @param {Number} params.degree The degree of the spline
+     * @param {Array<{x:Number, y:Number}>} [params.points] An array of control points
+     * @param {Number} [params.degree] The degree of the spline
      */
-    constructor({ points = [], degree = 1 }) {
+    constructor({ points = [], degree = 1 } = {}) {
         this.points = points;
         this.degree = degree;
     }
@@ -7840,6 +7881,18 @@ class DefBezierSpline {
     }
 
     /**
+    * Computes a Catmull-Rom spline from an array of points. The curve will go through all points.
+    * @param {Array<Number | Object> | Number | Array} points Either the indices or values of TYPE_POINT or the index of value of an array containing points. The points from which to make the Bezier spline of
+    * @returns {CreateInfo} The creation info
+    */
+    static fromCatmullRom(points) {
+        if (!Array.isArray(points)) {
+            points = [points];
+        }
+        return CreateInfo.new("cm", points);
+    }
+
+    /**
      * Computes the Bezier spline
      * @param {CreateInfo} createInfo The creation info
      * @returns {Object} A Bezier spline of type TYPE_BEZIER_SPLINE
@@ -7847,7 +7900,7 @@ class DefBezierSpline {
     compute(createInfo) {
         const { dependencies } = createInfo;
         let { points } = this;
-        const { degree } = this;
+        let { degree } = this;
         const { attach } = createInfo.params;
 
         if (createInfo.name === "p") {
@@ -7877,6 +7930,52 @@ class DefBezierSpline {
             } else {
                 points = pointArray;
             }
+        } else if (createInfo.name === "cm") {
+
+            let input = dependencies;
+
+            // we allow the input to be either a number of points or an array containing the points
+            if (input.length === 1 && Array.isArray(input[0])) {
+                input = input[0];
+            }
+
+            for (const p of input) {
+                assertExistsAndNotOptional(p);
+                assertType(p, TYPE_POINT);
+            }
+
+            if (input.length < 2) {
+                throw new Error("Need at least two points for Catmull-Rom spline");
+            }
+            const tangents = [];
+            for (let i = 0; i < input.length; i++) {
+                // compute tangents
+                const il = Math.max(0, i - 1);
+                const ir = Math.min(input.length - 1, i + 1);
+                const t = Vec2.scale(
+                    Vec2.sub(input[ir], input[il]),
+                    0.5
+                );
+
+                tangents.push(t);
+            }
+
+            // convert to piecewise cubics
+            degree = 3;
+            // each curve segment is made from two points and a tangent
+            // the first point is added at the beginning and then ommited
+            points = [input[0]];
+            for (let i = 0; i < input.length - 1; i++) {
+                const p0 = input[i];
+                const t0 = tangents[i];
+                const p1 = input[i + 1];
+                const t1 = tangents[i + 1];
+
+                const [q0, q1, q2, q3] = DefBezier.hermiteToCubic(p0, t0, p1, t1);
+                points.push(q1, q2, q3);
+            }
+
+
         } else if (createInfo !== EMPTY_INFO) {
             throw new Error("No suitable constructor");
         }
