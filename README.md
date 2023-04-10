@@ -82,3 +82,9 @@ JSFiddle version of the code: [Fiddle](https://jsfiddle.net/xrmhjovc/)
 JSFiddle version of the code: [Fiddle](https://jsfiddle.net/t486v2do/)
 
 <img src="../assets/img/sat.gif" alt="SAT" width="50%"></img>
+
+### Smooth function
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/6koca49p/)
+
+<img src="../assets/img/smooth_func.gif" alt="Smooth function" width="50%"></img>
