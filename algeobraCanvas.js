@@ -887,6 +887,17 @@ class CoordinateMapper {
     }
 
     /**
+  * The scaling factor that scales local lengths to the output surface space.
+  * The viewport is uniformly scaled, so it is just a single value
+  * @returns {Number} The scaling factor
+  */
+    scalingSurfaceToLocal() {
+        // we will make sure to not scale dimensions differently
+        return 1.0 / this.scalingLocalToSurface();
+    }
+
+
+    /**
      * Converts a local angle to output surface angle
      * @param {Number} a The local angle
      * @returns {Number} The transformed angle
@@ -2033,91 +2044,141 @@ class ScenePainter {
     }
 }
 
-
 /**
- * Draws a scene to DiagramCanvas
- * @param {GeometryScene} scene 
- * @param {DiagramCanvas} canvas 
- * @param {Object} params
- * @param {Object} params.bg The background config. Full config options at BASIC_BACKGROUND_CONFIG
+ * This sorts the objects in the scene, according to their z-value, if present. Default z is 0.
+ * Objects may be excluded from drawing by adding a "invisible" property and setting it to true
+ * @param {GeometryScene} scene The scene
+ * @returns {Array<{value: Object, z : Number, properties: Object}>} Sorted list of objects to be drawn
  */
-function drawSceneToDiagram(scene, canvas, {
-    bg = NO_BACKGROUND_CONFIG
-} = {}) {
-    canvas.clear();
-    canvas.drawBackground(bg);
+function sortDrawables(scene) {
     const drawables = [];
     for (const obj of scene.view({ skipInvalidValues: true })) {
-        const vals = obj.value instanceof Array ? obj.value : [obj.value];
-
-        const { properties = {} } = obj;
+        const { value, properties = {} } = obj;
         if (properties["invisible"]) {
             continue;
         }
-        const { style, z = 0 } = properties;
-        for (let i = 0; i < vals.length; i++) {
+        const { z = 0 } = properties;
 
-            const val = vals[i];
-            drawables.push({
-                val,
-                z,
-                style
-            });
+        drawables.push({
+            value,
+            z,
+            properties
+        });
 
-        }
     }
 
     drawables.sort((a, b) => {
         return b.z - a.z;
     });
 
-    for (let i = 0; i < drawables.length; i++) {
-        const { val, style } = drawables[i];
-        if (val.type === TYPE_POINT) {
-            canvas.drawPoint(val.x, val.y, style);
-        } else if (val.type === TYPE_LINE) {
-            const { p0, p1 } = val;
-            canvas.drawLine(p0.x, p0.y, p1.x, p1.y, val.leftOpen, val.rightOpen, style);
-        } else if (val.type === TYPE_VECTOR) {
-            const { ref, x, y } = val;
-            canvas.drawVector(ref.x, ref.y, ref.x + x, ref.y + y, style);
-        } else if (val.type === TYPE_ARC) {
-            const { center, r, startAngle, endAngle } = val;
-            canvas.drawArc(center.x, center.y, r, startAngle, endAngle, style);
-        } else if (val.type === TYPE_ANGLE) {
-            const { ref, value, start } = val;
-            canvas.drawAngle(ref.x, ref.y, value, start, style);
-        } else if (val.type === TYPE_TEXT) {
-            const { text, ref } = val;
-            canvas.drawText(ref.x, ref.y, text, style);
-        } else if (val.type === TYPE_LINE_STRIP) {
-            const { points } = val;
-            canvas.drawLineStrip(points, style);
-        } else if (val.type === TYPE_POLYGON) {
-            const { points } = val;
-            canvas.drawPolygon(points, style);
-        } else if (val.type === TYPE_BEZIER) {
-            const { points } = val;
-            canvas.drawBezier(points, style);
-        } else if (val.type === TYPE_BEZIER_SPLINE) {
-            const { points, degree } = val;
-            canvas.drawBezierSpline(points, degree, style);
-        } else if (val.type === TYPE_ELLIPSE) {
-            const { center,
-                rx,
-                ry,
-                startAngle,
-                endAngle,
-                rotation, } = val;
-            canvas.drawEllipse(center.x,
-                center.y,
-                rx,
-                ry,
-                startAngle,
-                endAngle,
-                rotation, style);
+    return drawables;
+}
+
+/**
+ * Class to bundle a number of drawing functions for differently typed objects
+ * A default drawing function can be provided to handle all-non provided typed objects
+ * An drawing function for untyped objects allows to draw arbitrary objects
+ */
+class DrawFuncRegistry {
+    /**
+     * A drawing function has the same signature as DrawFuncRegistry.draw
+     * All of the provided fields can be changed later as well
+     * @param {Object} params
+     * @param {Object} [params.typedDrawFuncs] A map of typename -> drawing function pairs
+     * @param {Function} [params.defaultDrawFunc] The function called for non registered types
+     * @param {Function} [params.untypedDrawFunc] The drawing function for general untyped objects
+     */
+    constructor({ typedDrawFuncs = {},
+        defaultDrawFunc = () => { },
+        untypedDrawFunc = () => { },
+    } = {}) {
+        this.typedDrawFuncs = typedDrawFuncs;
+        this.defaultDrawFunc = defaultDrawFunc;
+        this.untypedDrawFunc = untypedDrawFunc;
+    }
+
+    /**
+     * Draw an object to an output
+     * @param {Object} output The output object. Must be compatible with the registered functions
+     * @param {Object} object The object to be drawn
+     * @param {Object} properties Properties corresponding to the object
+     */
+    draw(output, object, properties) {
+        const type = object.type;
+        if (type !== undefined) {
+            const f = this.typedDrawFuncs[type];
+            if (f !== undefined) {
+                f(output, object, properties);
+            } else {
+                this.defaultDrawFunc(output, object, properties);
+            }
+        } else {
+            this.untypedDrawFunc(output, object, properties);
         }
     }
+}
+
+/**
+ * Fills a DrawFuncRegistry with default functions for the predefined algeobra types
+ * @returns {DrawFuncRegistry} Default diagram drawing functions for algeobra types
+ */
+function createDiagramCanvasDrawFuncRegistry() {
+    const tf = {};
+
+    tf[TYPE_POINT] = (diagram, obj, props) => diagram.drawPoint(obj.x, obj.y, props.style);
+    tf[TYPE_LINE] = (diagram, obj, props) => {
+        const { p0, p1, leftOpen, rightOpen } = obj;
+        diagram.drawLine(p0.x, p0.y, p1.x, p1.y, leftOpen, rightOpen, props.style);
+    };
+    tf[TYPE_VECTOR] = (diagram, obj, props) => {
+        const { ref, x, y } = obj;
+        diagram.drawVector(ref.x, ref.y, ref.x + x, ref.y + y, props.style);
+    };
+
+    tf[TYPE_ARC] = (diagram, obj, props) => {
+        const { center, r, startAngle, endAngle } = obj;
+        diagram.drawArc(center.x, center.y, r, startAngle, endAngle, props.style);
+    };
+
+    tf[TYPE_ANGLE] = (diagram, obj, props) => {
+        const { ref, value, start } = obj;
+        diagram.drawAngle(ref.x, ref.y, value, start, props.style);
+    };
+    tf[TYPE_TEXT] = (diagram, obj, props) => {
+        const { text, ref } = obj;
+        diagram.drawText(ref.x, ref.y, text, props.style);
+    };
+    tf[TYPE_LINE_STRIP] = (diagram, obj, props) => {
+        const { points } = obj;
+        diagram.drawLineStrip(points, props.style);
+    };
+    tf[TYPE_POLYGON] = (diagram, obj, props) => {
+        const { points } = obj;
+        diagram.drawPolygon(points, props.style);
+    };
+    tf[TYPE_BEZIER] = (diagram, obj, props) => {
+        const { points } = obj;
+        diagram.drawBezier(points, props.style);
+    };
+    tf[TYPE_BEZIER_SPLINE] = (diagram, obj, props) => {
+        const { points, degree } = obj;
+        diagram.drawBezierSpline(points, degree, props.style);
+    };
+    tf[TYPE_ELLIPSE] = (diagram, obj, props) => {
+        const { center,
+            rx, ry,
+            startAngle, endAngle,
+            rotation, } = obj;
+        diagram.drawEllipse(
+            center.x, center.y,
+            rx, ry,
+            startAngle, endAngle,
+            rotation, props.style);
+    }
+
+    const reg = new DrawFuncRegistry({ typedDrawFuncs: tf });
+
+    return reg;
 }
 
 class DiagramPainter extends ScenePainter {
@@ -2140,16 +2201,31 @@ class DiagramPainter extends ScenePainter {
      * @param {Boolean} [options.autoResize.keepAspect = false] If true, the autoresize will keep the previous aspect ratio, if false not
      */
     constructor(scene, diagram, {
+        drawFuncRegistry = createDiagramCanvasDrawFuncRegistry(diagram),
         bg = NO_BACKGROUND_CONFIG,
         autoResize = null,
     } = {}) {
         super(scene);
         this.bg = bg;
+        this.drawFuncRegistry = drawFuncRegistry;
         this.#diagram = diagram;
 
         this.#currentSize = [diagram.canvas.width, diagram.canvas.height];
 
-        this.setDrawFunc((s) => drawSceneToDiagram(s, this.#diagram, { bg: this.bg }));
+        this.setDrawFunc((s) => {
+            this.#diagram.clear();
+            this.#diagram.drawBackground(this.bg);
+            const drawables = sortDrawables(s);
+
+            for (let i = 0; i < drawables.length; i++) {
+                const { value, properties } = drawables[i];
+                const draw = Array.isArray(value) ? value : [value];
+                for (let j = 0; j < draw.length; j++) {
+                    const obj = draw[j];
+                    this.drawFuncRegistry.draw(this.#diagram, obj, properties);
+                }
+            }
+        });
 
         if (autoResize) {
             const {
@@ -2203,14 +2279,15 @@ class DiagramPainter extends ScenePainter {
 export {
     CoordinateMapper,
     DiagramCanvas,
-    styles,
     PointManipulator,
-    drawSceneToDiagram,
-    clientPositionToLocal as documentPositionToLocal,
-    mouseEventToPosition,
-    NO_BACKGROUND_CONFIG,
-    BASIC_BACKGROUND_CONFIG,
-    makeTicks,
     ScenePainter,
     DiagramPainter,
+    DrawFuncRegistry,
+    createDiagramCanvasDrawFuncRegistry,
+    clientPositionToLocal,
+    mouseEventToPosition,
+    makeTicks,
+    styles,
+    NO_BACKGROUND_CONFIG,
+    BASIC_BACKGROUND_CONFIG,
 }
