@@ -27,7 +27,7 @@ function showFrustum(container) {
     const {
     } = THREE;
 
-    // in this demo we will display a smooth sine curve by computing a number of sample points and then displaying them using a Catmull-Rom spline
+    // in this demo we will display how the common perspective matrix transforms a view frustum to a cube and squishes distances
 
     alg3.registerAlgeobraIntersectors();
 
