@@ -4379,6 +4379,169 @@ class DefVector {
 }
 
 /**
+ * Easier access to some common vector operations.
+ * These could also easily be implemented by a DefFunc
+ */
+class DefVectorOps {
+
+    /**
+     * Attaches the second vector at the tip of the first. 
+     * The result is a vector that points from the first vector's reference point to the tip of the second.
+     * Optionally, a new reference point may be specified. 
+     * The result will be of type TYPE_VECTOR
+     * NOTE: This will be equivalent to adding the vectors and placing them at the reference, if they share the same reference point.
+     * 
+     * @param {Number | Object} a Either the index or value of a TYPE_VECTOR. The first vector
+     * @param {Number | Object} b Either the index or value of a TYPE_VECTOR. The vector to be attached
+     * @param {Number | Object} [ref] Either the index or value of a TYPE_POINT. The new reference
+     * @returns {CreateInfo} The creation info
+     */
+    static fromAttach(a, b, ref = EMPTY) {
+        return CreateInfo.new("att", { a, b, ref });
+    }
+
+    /**
+     * Computes the dot product of two vectors.
+     * The result will be of type TYPE_NUMBER
+     * @param {Number | Object} a Either the index or value of a TYPE_VECTOR. The first vector
+     * @param {Number | Object} b Either the index or value of a TYPE_VECTOR. The second vector
+     * @returns {CreateInfo} The creation info
+     */
+    static fromDot(a, b) {
+        return CreateInfo.new("dot", { a, b });
+    }
+
+    /**
+     * Negates the given vectors
+     * Optionally, the reference point can be switched to the old arrow tip, so the arrow overall stays in the same place
+     * The result will be of type TYPE_VECTOR
+     * 
+     * @param {Number | Object} a Either the index or value of a TYPE_VECTOR. The vector
+     * @param {Boolean} [attachAtEndPoint] Whether or not the new vector will be attached at the old arrow tip
+     * @returns {CreateInfo} The creation info
+     */
+    static fromNegate(a, attachAtEndPoint = false) {
+        return CreateInfo.new("neg", { a }, { attachAtEndPoint });
+    }
+
+    /**
+     * Transforms a given vector by rotation and scaling
+     * Optionally, a new reference point may be specified. 
+     * The result will be of type TYPE_VECTOR
+     * 
+     * @param {Number | Object} a Either the index or value of a TYPE_VECTOR. The vector
+     * @param {Object} params
+     * @param {Number | Object} [params.alpha] Either the index or value of a TYPE_NUMBER. The rotation angle
+     * @param {Number | Object} [params.scale] Either the index or value of a TYPE_NUMBER. The scaling factor
+     * @param {Number | Object} [params.normalize] Either the index or value of a TYPE_BOOLEAN. Whether the vector should be normalized before scaling
+     * @param {Number | Object} [params.ref] Either the index or value of a TYPE_POINT. The new reference point
+     * @param {Object} [defaultValues]
+     * @param {Number} [defaultValues.alpha = 0] Default value for the rotation angle
+     * @param {Number} [defaultValues.scale = 1] Default value for the scaling factor
+     * @param {Number} [defaultValues.normalize = false] Default value for the normalization
+     * @returns {CreateInfo} The creation info
+     */
+    static fromTransform(a, { alpha = EMPTY, scale = EMPTY, normalize = EMPTY, ref = EMPTY, },
+        defaultValues = {}) {
+        const { alpha: alpha0 = 0, scale: scale0 = 1, normalize: normalize0 = false } = defaultValues;
+        return CreateInfo("tr", { a, alpha, scale, normalize, ref, }, {
+            alpha: alpha0, scale: scale0, normalize: normalize0
+        });
+    }
+
+    /**
+     * Computes the specified operation
+     * @param {CreateInfo} info The creation info
+     * @returns The result of the operation of the type specified for the different from methods
+     */
+    compute(info) {
+        const { dependencies, params } = info;
+
+        if (info.name === "att") {
+            const { a, b, ref } = dependencies;
+            assertExistsAndNotOptional(a, b);
+            assertType(a, TYPE_VECTOR);
+            assertType(b, TYPE_VECTOR);
+            const ab = Vec2.add(a, b);
+
+            let refp = a.ref;
+            if (!isParamEmpty(ref)) {
+                assertType(ref, TYPE_POINT);
+                refp = ref;
+            }
+
+            return makeVector({ x: ab.x, y: ab.y, ref: refp });
+        } else if (info.name === "dot") {
+            const { a, b } = dependencies;
+            assertExistsAndNotOptional(a, b);
+            assertType(a, TYPE_VECTOR);
+            assertType(b, TYPE_VECTOR);
+            const dot = Vec2.dot(a, b);
+
+            return makeNumber(dot);
+        } else if (info.name === "neg") {
+            const { a } = dependencies;
+            const { attachAtEndPoint } = params;
+            const v = Vec2.scale(a, -1);
+            let ref = a.ref;
+            if (attachAtEndPoint) {
+                ref = Vec2.add(ref, a);
+            }
+
+            return makeVector({ x: v.x, y: v.y, ref });
+        } else if (info.name === "tr") {
+            const { a, alpha: alpha0,
+                scale: scale0, normalize: normalize0, ref: ref0 } = dependencies;
+            let { alpha, scale, normalize } = params;
+
+            assertExistsAndNotOptional(a);
+            assertType(a, TYPE_VECTOR);
+
+            if (!isParamEmpty(t0)) {
+                assertType(t0, TYPE_VECTOR);
+                t = t0;
+            }
+
+            if (!isParamEmpty(alpha0)) {
+                assertType(alpha0, TYPE_NUMBER);
+                alpha = alpha0.value;
+            }
+
+            if (!isParamEmpty(scale0)) {
+                assertType(scale0, TYPE_NUMBER);
+                scale = scale0.value;
+            }
+
+            if (!isParamEmpty(normalize0)) {
+                assertType(normalize0, TYPE_BOOLEAN);
+                normalize = normalize0.value;
+            }
+
+            let ref = a.ref;
+
+            if (!isParamEmpty(ref0)) {
+                assertType(ref0, TYPE_POINT);
+                ref = ref0;
+            }
+
+            let vf = a;
+
+            if (normalize) {
+                vf = Vec2.normalizeIfNotZero(vf);
+            }
+            vf = Vec2.scale(vf, scale);
+            vf = Vec2.rotate(vf, alpha);
+
+            return makeVector({ x: vf.x, y: vf.y, ref });
+
+        } else {
+            throw new Error("No suitable constructor");
+        }
+
+    }
+}
+
+/**
  * Definition of a normal vector  that can be constructed in various ways. 
  * A vector consists of x and y coordinates specifying its direction and length and a reference point to which it is attached to.
  * While a mathematical vector is of course not bound to a specific point, this makes working with and displaying vectors easier
