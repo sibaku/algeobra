@@ -12,10 +12,11 @@ import * as alg from "https://cdn.jsdelivr.net/gh/sibaku/algeobra/algeobra.js";
 import * as vis from "https://cdn.jsdelivr.net/gh/sibaku/algeobra/algeobraCanvas.js";
 ```
 
-There are currently two files:
+There are currently three files:
 
 * **algeobra.js**: The main library. Contains various types and methods for geometry computations, such as points, lines, circles, intersections, tangents, etc...
 * **algeobraCanvas.js**: Basic functionality to display a geometry scene onto a HTML canvas. The library itself does not require any drawing operations, so this could be replaced or extended as needed. For that, some helper functions are provided as well. For example, offline or SVG rendering should be easy to achieve, as everything that is used for the canvas is also present there
+* **algeobra3d.js**: Basic functionality to display a 3D geometry scene with [Three.js](https://threejs.org/). Objects are managed and added to an existing scene, so they can coexist with other things. This module also includes 3D geometry primitives. As 3D has many more cases, these primitives are currently not very numerous. The rendering component though is set up in a way, that it should be easy to extend with more types. Adding custom definitions for the existing types is the same as the usual algeobra code.
 
 Here you can have a look at a basic interactive diagram and the code used to generate it. Two draggable points are created and a vector is drawn between them:
 
@@ -55,6 +56,8 @@ Demos to use as reference can be found in the demo directory and branch [Demo br
 
 Tutorial code can be found in the demo branch in the demo/tutorial directory or [tutorial code](https://github.com/sibaku/algeobra/tree/demos/demos/tutorial).
 
+Additional tutorials for the WIP 3D module can be found under demo/demos3d.
+
 You will need a local server to open the HTML/load the module files. If you just want to have a look, JSFiddle versions are listed below, so you can look at it directly in the browser.
 
 The following shows a list of the current tutorials that you can find in the code
@@ -88,3 +91,9 @@ JSFiddle version of the code: [Fiddle](https://jsfiddle.net/t486v2do/)
 JSFiddle version of the code: [Fiddle](https://jsfiddle.net/6koca49p/)
 
 <img src="../assets/img/smooth_func.gif" alt="Smooth function" width="50%"></img>
+
+### 3D Perspective view frustum transform
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/twqcasef/)
+
+<img src="../assets/img/frustum.gif" alt="Frustum" width="50%"></img>
