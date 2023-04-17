@@ -16,6 +16,7 @@ import {
     TYPE_ANGLE,
     TYPE_POINT,
     TYPE_VECTOR,
+    TYPE_COORD_SYSTEM,
     TYPE_LINE,
     TYPE_LINE_STRIP,
     TYPE_POLYGON,
@@ -203,6 +204,79 @@ const styles = {
                 },
             }
 
+        },
+        coordinateSystem: {
+            origin: {
+                r: 2,
+                fillStyle: "rgb(0,0,0)",
+                strokeStyle: "rgb(0,0,0)",
+                outline: {
+                    lineWidth: 1.0,
+                    lineCap: "butt",
+                    lineJoin: "miter",
+                    miterLimit: 10,
+                    lineDash: [],
+                    lineDashOffset: 0.0
+                },
+            },
+            u: {
+                shaft: {
+                    fillStyle: "rgb(255,0,0)",
+                    strokeStyle: "rgb(255,0,0)",
+                    lineStyle: {
+                        lineWidth: 1.0,
+                        lineCap: "butt",
+                        lineJoin: "miter",
+                        miterLimit: 10,
+                        lineDash: [],
+                        lineDashOffset: 0.0
+                    },
+                },
+                arrow: {
+                    length: 0.2,
+                    width: 0.05,
+                    sizeRelative: true,
+                    fillStyle: "rgb(255,0,0)",
+                    strokeStyle: "rgb(255,0,0)",
+                    lineStyle: {
+                        lineWidth: 1.0,
+                        lineCap: "butt",
+                        lineJoin: "miter",
+                        miterLimit: 10,
+                        lineDash: [],
+                        lineDashOffset: 0.0
+                    },
+                }
+            },
+            v: {
+                shaft: {
+                    fillStyle: "rgb(0,0,255)",
+                    strokeStyle: "rgb(0,0,255)",
+                    lineStyle: {
+                        lineWidth: 1.0,
+                        lineCap: "butt",
+                        lineJoin: "miter",
+                        miterLimit: 10,
+                        lineDash: [],
+                        lineDashOffset: 0.0
+                    },
+                },
+                arrow: {
+                    length: 0.2,
+                    width: 0.05,
+                    sizeRelative: true,
+                    fillStyle: "rgb(0,0,255)",
+                    strokeStyle: "rgb(0,0,255)",
+                    lineStyle: {
+                        lineWidth: 1.0,
+                        lineCap: "butt",
+                        lineJoin: "miter",
+                        miterLimit: 10,
+                        lineDash: [],
+                        lineDashOffset: 0.0
+                    },
+                }
+            }
         },
         polygon: {
             strokeStyle: "rgb(0,0,255)",
@@ -2133,6 +2207,19 @@ function createDiagramCanvasDrawFuncRegistry() {
     tf[TYPE_VECTOR] = (diagram, obj, props) => {
         const { ref, x, y } = obj;
         diagram.drawVector(ref.x, ref.y, ref.x + x, ref.y + y, props.style);
+    };
+
+    tf[TYPE_COORD_SYSTEM] = (diagram, obj, props) => {
+        const { origin, u, v } = obj;
+        // get props
+        const { style = {} } = props;
+        const originStyle = createFromTemplate(styles.geo.coordinateSystem.origin, style.origin);
+        const uStyle = createFromTemplate(styles.geo.coordinateSystem.u, style.u);
+        const vStyle = createFromTemplate(styles.geo.coordinateSystem.v, style.v);
+
+        diagram.drawPoint(origin.x, origin.y, originStyle)
+        diagram.drawVector(origin.x, origin.y, origin.x + u.x, origin.y + u.y, uStyle);
+        diagram.drawVector(origin.x, origin.y, origin.x + v.x, origin.y + v.y, vStyle);
     };
 
     tf[TYPE_ARC] = (diagram, obj, props) => {

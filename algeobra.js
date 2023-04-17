@@ -719,6 +719,11 @@ const TYPE_POLAR = "polar";
  */
 const TYPE_VECTOR = "vector";
 /**
+ * /**
+ * Type specifier for a coordinate system type
+ */
+const TYPE_COORD_SYSTEM = "coordSystem";
+/**
  * Type specifier for a line type
  */
 const TYPE_LINE = "line";
@@ -1124,6 +1129,22 @@ function makeVector({
         x, y, ref, type: TYPE_VECTOR
     };
 }
+
+/**
+ * Creates a coordinate system type object of type TYPE_COORD_SYSTEM
+ * Any object that has the following fields can be treated as a coordinate system value:
+ * { origin: {x:Number, y:Number}, u: {x:Number, y:Number}, v: {x:Number, y:Number}, type = TYPE_COORD_SYSTEM }
+ * @param {{x:Number, y:Number}} origin The origin
+ * @param {{x:Number, y:Number}} u The first axis
+ * @param {{x:Number, y:Number}} v The second axis
+ * @returns {{origin : {x:Number, y:Number}, u : {x:Number, y:Number}, y: {x:Number, y:Number}, type: String}}
+ */
+function makeCoordinateSystem(origin, u, v) {
+    return {
+        origin, u, v, type: TYPE_COORD_SYSTEM
+    };
+}
+
 /**
  * Creates an Angle type object of type TYPE_ANGLE
  * Any object that has the following fields can be treated as an Angle value:
@@ -4541,6 +4562,416 @@ class DefVectorOps {
     }
 }
 
+/**
+ * Definition of a coordinate system
+ * 
+ * Coordinte systems may be placed relative to other coordinate systems. They are specified by two local axes and a local origin.
+ * 
+ * When computing the value, the final coordinates of origin and axes will be in the same coordinate frame as the parent. 
+ * Thus, in  general, the result will be in world coordinates, as each parent, will itself be specified in its parent's system, until there is a system with no parent (implicit world coordinates)
+ * 
+ * This makes it easy to define vectors and points locally, with DefCoordSystemOps  and still use those resulting  vectors together with arbitrary other ones, without the issue if different coordinate frames
+ */
+class DefCoordSystem {
+
+    /**
+     * Creates a coordinate system structure for the given parameters
+     * If origin is not given, it defaults to the usual (0,0)
+     * If u is not given, it defaults to the usual x-axis (1,0)
+     * If v is not given, it defaults to the normal vector to u.
+     * @param {Object} [params]
+     * @param {{x:Number, y:Number}} [params.origin] The origin
+     * @param {{x:Number, y:Number}} [params.u] The first axis
+     * @param {{x:Number, y:Number}} [params.v] The second axis
+     * @returns {{origin: {x:Number, y:Number}, u: {x:Number, y:Number}, v: {x:Number, y:Number}}}
+     */
+    static createSystem({ origin, u, v } = {}) {
+        origin = origin ?? Vec2.vec2(0, 0);
+        // u needs to be specified, otherwise v is set back
+        if (!u) {
+            v = null;
+        }
+        u = u ?? Vec2.vec2(1, 0);
+        v = v ?? Vec2.normal2D(u);
+        return { origin, u, v };
+    }
+
+    /**
+     * Computes the contravariant basis for a given basis
+     * 
+     * As the basis vectors are not required to be normalized or orthogonal, the contravariant basis can be used to determine the coordinates of a vector in the given basis
+     * 
+     * @param {{x:Number, y:Number}} u The first axis
+     * @param {{x:Number, y:Number}} v The second axis
+     * @returns {{u: {x:Number, y:Number}, v: {x:Number, y:Number}}} The contravariant basis vectors
+     */
+    static computeContravariantBasis(u, v) {
+        const u2 = Vec2.len2(u);
+        const v2 = Vec2.len2(v);
+        const dotUV = Vec2.dot(u, v);
+        const a = 1 / (u2 * v2 - dotUV * dotUV);
+
+        const up = Vec2.add(Vec2.scale(u, a * v2), Vec2.scale(v, -a * dotUV));
+        const vp = Vec2.add(Vec2.scale(u, -a * dotUV), Vec2.scale(v, a * u2));
+
+        return { u: up, v: vp };
+    }
+    /**
+     * Computes the world coordinates of a vector specified in the local coordinates
+     * 
+     * As a vector has no position, this just depends on the axes
+     * 
+     * @param {{x:Number, y:Number}} coords The local coordintaes
+     * @param {Object} coordSystem
+     * @param {{x:Number, y:Number}} coordSystem.u The first axis
+     * @param {{x:Number, y:Number}} coordSystem.v The second axis
+     * @returns {{x:Number, y:Number}} The world vector
+     */
+    static vectorFromCoordSystem(coords, { u, v }) {
+        return Vec2.add(Vec2.scale(u, coords.x), Vec2.scale(v, coords.y));
+    }
+
+    /**
+     * Computes the world coordinates of a point specified in the local coordinates
+     * 
+     * @param {{x:Number, y:Number}} coords The local coordintaes
+     * @param {Object} coordSystem
+     * @param {{x:Number, y:Number}} coordSystem.origin The origin
+     * @param {{x:Number, y:Number}} coordSystem.u The first axis
+     * @param {{x:Number, y:Number}} coordSystem.v The second axis
+     * @returns {{x:Number, y:Number}} The world point
+     */
+    static pointFromCoordSystem(coords, { origin, u, v }) {
+        return Vec2.add(origin, Vec2.add(Vec2.scale(u, coords.x), Vec2.scale(v, coords.y)));
+    }
+
+    /**
+     * Computes, whether a coordinate system is right-handed
+     * @param {{x:Number, y:Number}} u The first axis
+     * @param {{x:Number, y:Number}} v The second axis
+     * @returns True, if the coordinate system is right-handed, otherwise false
+     */
+    static isRightHanded(u, v) {
+        // check whether the determinant of the matrix made up of both base cectors is non-negative
+        return u.x * v.y - u.y * v.x >= 0;
+    }
+
+    /**
+     * Default values
+     * @param {Object} [params]
+     * @param {{orign : {x:Number, y:Number}, u : {x:Number, y:Number}, v: {x:Number, y:Number}}} [params.local] The local coordinate system
+     * @param {{orign : {x:Number, y:Number}, u : {x:Number, y:Number}, v: {x:Number, y:Number}}} [params.prent] The parent coordinate system
+     */
+    constructor({ local = {}, parent = {} } = {}) {
+
+        this.local = local;
+        this.parent = parent;
+    }
+
+    /**
+     * Creates a coordinate system by specifying local origin and axes
+     * 
+     * If the first axis (u) is given, the second default value will be overriden by the given second axis (v) as well, even if that is empty.
+     * That means, if u is not given, v will also be set to empty and used the default values, if they are set.
+     * If v is empty, it will be computed as the normal to u.
+     * 
+     * When not given any values, the defaults are the usual coordinate axies with origin (0,0) and u = (1,0), v = (0,1)
+     * 
+     * @param {Object} [params]
+     * @param {Number | Object} [params.origin] Either the index or value of a TYPE_POINT. The local origin
+     * @param {Number | Object} [params.u] Either the index or value of a TYPE_VECTOR. The first axis
+     * @param {Number | Object} [params.v] Either the index or value of a TYPE_VECTOR. The second axis
+     * @param {Number | Object} [params.parent] Either the index or value of a TYPE_COORD_SYSTEM. The parent coordinate system
+     * @returns {CreateInfo} The creation info
+     */
+    static fromValues({ origin = EMPTY, u = EMPTY, v = EMPTY, parent = EMPTY } = {}) {
+        return CreateInfo.new("v", { origin, u, v, parent });
+    }
+
+    /**
+     * Creates a coordinate system by specifying a transformation of the local axes
+     * 
+     * @param {Object} [params]
+     * @param {Number | Object} [params.translation] Either the index or value of a TYPE_VECTOR. The translation of the origin
+     * @param {Number | Object} [params.rotation] Either the index or value of a TYPE_NUMBER. The rotation angle of the first axis
+     * @param {Number | Object} [params.scale] Either the index or value of either type TYPE_VECTOR or TYPE_NUMBER. The scaling factor
+     * @param {Number | Object} [params.parent] Either the index or value of a TYPE_COORD_SYSTEM. The parent coordinate system
+     * @param {Object} [defaultValues]
+     * @param {{x: Number, y:Number}} [defaultValues.translation] Default value for the translation
+     * @param {Number} [defaultValues.rotation] Default value for the rotation angle
+     * @param {Number | {x: Number, y:Number}} [defaultValues.scale] Default value for the scale
+     * @returns {CreateInfo} The creation info
+     */
+    static fromTransform({ translation = EMPTY, rotation = EMPTY, scale = EMPTY, parent = EMPTY }, defaultValues) {
+        const { translation: t = { x: 0, y: 0 }, rotation: rot = 0, scale: s = { x: 1, y: 1 } } = defaultValues;
+        return CreateInfo.new("t", { translation, rotation, scale, parent }, {
+            translation: t, rotation: rot, scale: s
+        });
+    }
+
+    /**
+     * Creates a coordinate system that consist of the same origin but the contravarint base vectors as the given system
+     * 
+     * @param {Number | Object} system Either the index or value of a TYPE_COORD_SYSTEM. The system which this one is based on
+     * @param {Number | Object} [parent] Either the index or value of a TYPE_COORD_SYSTEM. The parent coordinate system
+     * @returns {CreateInfo} The creation info
+     */
+    static fromContravariant(system, parent = EMPTY) {
+        return CreateInfo.new("c", { system, parent });
+    }
+
+    /**
+     * Computes the coordinate system
+     * @param {CreateInfo} info The creation info
+     * @returns {Object} An object of type TYPE_COORD_SYSTEM
+     */
+    compute(info) {
+        const { dependencies, params } = info;
+
+        let { local, parent } = this;
+        // copy values so they can be overriden
+        local = Object.assign({}, local);
+        parent = Object.assign({}, parent);
+
+        if (info.name === "v") {
+            const { origin, u, v, parent: parent0 } = dependencies;
+
+            if (!isParamEmpty(origin)) {
+                assertType(origin, TYPE_POINT);
+                local.origin = origin;
+            }
+
+            if (!isParamEmpty(u)) {
+                assertType(u, TYPE_VECTOR);
+                local.u = u;
+            }
+            if (!isParamEmpty(v)) {
+                assertType(v, TYPE_VECTOR);
+                local.v = v;
+            } else {
+                local.v = null;
+            }
+
+            if (!isParamEmpty(parent0)) {
+                assertType(parent0, TYPE_COORD_SYSTEM);
+                parent = parent0;
+            }
+
+        } else if (info.name === "t") {
+            let { translation, rotation, scale } = params;
+            if (typeof scale === "number") {
+                scale = Vec2.vec2(scale, scale);
+            }
+            const { translation: t0, rotation: r0, scale: s0, parent: parent0 } = dependencies;
+
+            if (!isParamEmpty(t0)) {
+                assertType(t0, TYPE_VECTOR);
+                translation = t0;
+            }
+            if (!isParamEmpty(s0)) {
+                assertType(s0, TYPE_VECTOR, TYPE_NUMBER);
+                if (s0.type === TYPE_VECTOR) {
+                    scale = s0;
+                } else {
+                    scale = Vec2.vec2(s0.value, s0.value);
+                }
+            }
+
+            if (!isParamEmpty(r0)) {
+                assertType(r0, TYPE_NUMBER);
+                rotation = r0.value;
+            }
+
+            // compute T * R * S
+            let u = Vec2.vec2(scale.x, 0);
+            let v = Vec2.vec2(0, scale.y);
+            u = Vec2.rotate(u, rotation);
+            v = Vec2.rotate(v, rotation);
+            local.u = u;
+            local.v = v;
+            local.origin = translation;
+
+            if (!isParamEmpty(parent0)) {
+                assertType(parent0, TYPE_COORD_SYSTEM);
+                parent = parent0;
+            }
+        } else if (info.name === "c") {
+            const { origin, u, v, parent: parent0 } = dependencies;
+
+            if (!isParamEmpty(origin)) {
+                assertType(origin, TYPE_POINT);
+                local.origin = origin;
+            }
+
+            if (!isParamEmpty(u)) {
+                assertType(u, TYPE_VECTOR);
+                local.u = u;
+            }
+            if (!isParamEmpty(v)) {
+                assertType(v, TYPE_VECTOR);
+                local.v = v;
+            } else {
+                local.v = null;
+            }
+
+            if (!isParamEmpty(parent0)) {
+                assertType(parent0, TYPE_COORD_SYSTEM);
+                parent = parent0;
+            }
+
+            // we want to have everything in world space
+            // as the contravariant base vectors transform inversely to the covariant ones, we will do the computation here
+            local = DefCoordSystem.createSystem(local);
+            parent = DefCoordSystem.createSystem(parent);
+            const o = Vec2.add(parent.origin,
+                DefCoordSystem.vectorFromCoordSystem(local.origin, parent))
+            let uc = DefCoordSystem.vectorFromCoordSystem(local.u, parent);
+            let vc = DefCoordSystem.vectorFromCoordSystem(local.v, parent);
+
+            ({ u: uc, v: vc } = DefCoordSystem.computeContravariantBasis(uc, vc));
+            return makeCoordinateSystem(o, uc, vc);
+
+        } else if (info !== EMPTY_INFO) {
+            throw new Error("No suitable constructor");
+        }
+
+        // we do this geometrically by specifying the final axes as linear combinations of the parent
+        // a matrix view is the same, but might be easier to read/generalize
+
+        // compute the origin in the parent coordinates
+        // here, we always assume the parent to be specified in world coordinates
+        // this way, all vectors computed from this system can be treated the same way as other vectors
+        local = DefCoordSystem.createSystem(local);
+        parent = DefCoordSystem.createSystem(parent);
+        const origin = Vec2.add(parent.origin,
+            DefCoordSystem.vectorFromCoordSystem(local.origin, parent))
+        const u = DefCoordSystem.vectorFromCoordSystem(local.u, parent);
+        const v = DefCoordSystem.vectorFromCoordSystem(local.v, parent);
+
+        return makeCoordinateSystem(origin, u, v);
+    }
+}
+
+/**
+ * Some operations for working with coordinatae systems
+ */
+class DefCoordSystemOps {
+
+    /**
+     * Computes the world coordinates of a point defined in the given coordinate system
+     * 
+     * The resulting type is the same as the one of v
+     * 
+     * @param {Number | Object} v Either the index or value of TYPE_POINT or TYPE_VECTOR. The input point or vector
+     * @param {Number | Object} [system] Either the index or value of a TYPE_COORD_SYSTEM. The system in which the point or vector is defined in
+     * @returns {CreateInfo} The creation info
+     */
+    static fromPointOrVec(v, coordSystem = EMPTY) {
+        return CreateInfo.new("v", { v, coordSystem });
+    }
+
+    /**
+     * Computes the local coordinates in the given coordinate system of a point defined in world space
+     * 
+     * The resulting type is the same as the one of v.
+     * 
+     * For vectors, the reference is transformed as well
+     * 
+     * @param {Number | Object} v Either the index or value of TYPE_POINT or TYPE_VECTOR. The input point or vector
+     * @param {Number | Object} [system] Either the index or value of a TYPE_COORD_SYSTEM. The system
+     * @returns {CreateInfo} The creation info
+     */
+    static fromToCoordinates(v, coordSystem = EMPTY) {
+        return CreateInfo.new("c", { v, coordSystem });
+    }
+
+    /**
+     * Computes, whether the given coordinte system is left or right-handed.
+     * 
+     * The resulting type is TYPE_BOOLEAN
+     * 
+     * @param {Number | Object} system Either the index or value of a TYPE_COORD_SYSTEM. The system
+     * @returns {CreateInfo} The creation info
+     */
+    static fromIsRightHanded(coordSystem) {
+        return CreateInfo.new("r", { coordSystem });
+    }
+
+    /**
+     * Computes the operation
+     * 
+     * @param {CreateInfo} info The creation info
+     * @returns {Object} An object with a type dependent on the specified operation
+     */
+    compute(info) {
+        const { dependencies, params } = info;
+        if (info.name === "v") {
+            const { v, coordSystem } = dependencies;
+            assertExistsAndNotOptional(v);
+            assertType(v, TYPE_POINT, TYPE_VECTOR);
+
+            let cs = coordSystem;
+            if (!isParamEmpty(cs)) {
+                assertType(cs, TYPE_COORD_SYSTEM);
+            } else {
+                cs = DefCoordSystem.createSystem();
+            }
+
+            // coords relative to coord origin
+            let vw = DefCoordSystem.vectorFromCoordSystem(v, cs);
+            if (v.type === TYPE_POINT) {
+                vw = Vec2.add(vw, cs.origin);
+                return makePoint(vw);
+            } else {
+                let ref = DefCoordSystem.vectorFromCoordSystem(v.ref, cs);
+                ref = Vec2.add(cs.origin, ref);
+                return makeVector({ x: vw.x, y: vw.y, ref });
+            }
+        } else if (info.name === "c") {
+            const { v, coordSystem } = dependencies;
+            assertExistsAndNotOptional(v);
+            assertType(v, TYPE_POINT, TYPE_VECTOR);
+
+            let cs = coordSystem;
+            if (!isParamEmpty(cs)) {
+                assertType(cs, TYPE_COORD_SYSTEM);
+            } else {
+                cs = DefCoordSystem.createSystem();
+            }
+
+            // coordintes are computes with the covariant base
+            const { u: uc, v: vc } = DefCoordSystem.computeContravariantBasis(cs.u, cs.v);
+            let p = v;
+            if (v.type === TYPE_POINT) {
+                p = Vec2.sub(p, cs.origin);
+                let pu = Vec2.dot(p, uc);
+                let pv = Vec2.dot(p, vc);
+                return makePoint({ x: pu, y: pv });
+            } else {
+                let pu = Vec2.dot(p, uc);
+                let pv = Vec2.dot(p, vc);
+
+                let ref = Vec2.sub(v.ref, cs.origin);
+                let ru = Vec2.dot(ref, uc);
+                let rv = Vec2.dot(ref, vc);
+
+                return makeVector({
+                    x: pu, y: pv, ref: {
+                        x: ru, y: rv
+                    }
+                });
+            }
+
+        } else if (info.name === "r") {
+            const { coordSystem } = dependencies;
+            assertExistsAndNotOptional(coordSystem);
+            assertType(coordSystem, TYPE_COORD_SYSTEM);
+            return makeBoolean(DefCoordSystem.isRightHanded(coordSystem.u, coordSystem.v));
+        } else {
+            throw new Error("No suitable constructor");
+        }
+    }
+}
 /**
  * Definition of a normal vector  that can be constructed in various ways. 
  * A vector consists of x and y coordinates specifying its direction and length and a reference point to which it is attached to.
@@ -9896,6 +10327,7 @@ export {
     TYPE_POINT,
     TYPE_POLAR,
     TYPE_VECTOR,
+    TYPE_COORD_SYSTEM,
     TYPE_LINE,
     TYPE_LINE_STRIP,
     TYPE_POLYGON,
@@ -9982,6 +10414,8 @@ export {
     ClosestPointRegistry,
     CreateInfo,
     DefVector,
+    DefCoordSystem,
+    DefCoordSystemOps,
     DefNormalVector,
     DefPerpendicularLine,
     DefParallelLine,
