@@ -13,6 +13,7 @@ document.body.onload = () => {
         tuts.pythagoras,
         tuts.sat,
         tuts.smoothFunction,
+        tuts.coordinateSystems,
     ];
 
     for (const d of dm) {

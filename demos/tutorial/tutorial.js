@@ -7,6 +7,8 @@ import {
     makeSlider,
     makeContainer,
     makeTextField,
+    makeUpdateSlider,
+    makeCheckbox,
 } from "../common.js";
 
 function controllableRectangle(container, canvas) {
@@ -1217,10 +1219,370 @@ function smoothFunction(container, canvas) {
 
 }
 
+function coordinateSystems(container, canvas) {
+    // get some fields for easier writing 
+    const {
+        DefPoint,
+        DefVector,
+        DefNumber,
+        DefCoordSystem,
+        DefCoordSystemOps,
+        DefSelect,
+        DefArray,
+        DefFunc,
+        DefBoolean,
+        DefText,
+        DefLine,
+        makeLine,
+    } = alg;
+
+    // in this demo we will define three coordinate systems relative to each other in different ways.
+    // one is defined by draggable points, one by sliders and another one spins around
+    // a vector is then defined locally in one of these systems and can be decomposed with respect to all others
+
+    // create a new scene
+    const scene = new alg.GeometryScene();
+
+    // this is the diagram we will draw into
+    // it is a predefined class to display a scene on a HTML canvas
+    // we pass in the min/max corners of the coordinate system viewport that we want to see
+    // we will flip y, as otherwise there might be some confusion when defining directions due to the canvas being a left-handed system
+    const diagram = new vis.DiagramCanvas({ x0: -2, y0: -2, x1: 5, y1: 5, flipY: true, canvas });
+    // this object will take care of drawing/redrawing our scene when anything changes
+    // we draw a basic background, since we are drawing a funcion
+    const diagPainter = new vis.DiagramPainter(scene, diagram, {
+        bg: vis.BASIC_BACKGROUND_CONFIG,
+        autoResize: {
+            target: container,
+            keepAspect: false,
+            minWidth: canvas.width,
+            widthFactor: 0.8,
+        },
+    });
+
+    // you can set the "invisible" field in the properties of an object. The drawing operation will then not draw this object
+    // that way, we can hide intermediate objects that are just used for construction
+    // we use this variable, so we can very easily toggle showing these objects, which is useful for debugging
+    const invisible = true;
+
+    // z-values
+    const pointZ = -1;
+
+    const origin0 = scene.add(new DefPoint(0, 0), EMPTY_INFO, {
+        z: pointZ,
+        style: {
+            r: 6,
+            fillStyle: "gray",
+        }
+    });
+    const p1 = scene.add(new DefPoint(1, 0), EMPTY_INFO, {
+        z: pointZ,
+        style: {
+            r: 6,
+            fillStyle: "gray",
+        }
+    });
+    const p2 = scene.add(new DefPoint(0, 1), EMPTY_INFO, {
+        z: pointZ,
+        style: {
+            r: 6,
+            fillStyle: "gray",
+        }
+    });
+
+    const normalizeU0 = scene.add(new DefBoolean(false));
+    const normalizeV0 = scene.add(new DefBoolean(false));
+    const u0 = scene.add(new DefVector(), DefVector.fromPoints(origin0, p1, normalizeU0), { invisible });
+    const v0 = scene.add(new DefVector(), DefVector.fromPoints(origin0, p2, normalizeV0), { invisible });
+
+    // We will add a line segment underneath to show the relation of the points even with normalized vectors
+    const lowerLineProps = {
+        z: 2,
+        style: {
+            strokeStyle: "gray",
+            lineStyle: {
+                lineDash: [4],
+            },
+        }
+    };
+    const lineU = scene.add(new DefLine(), DefLine.fromPoints(origin0, p1), lowerLineProps);
+    const lineV = scene.add(new DefLine(), DefLine.fromPoints(origin0, p2), lowerLineProps);
+    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, diagram.canvas,
+        [origin0, p1, p2], 40);
+
+    // helper to make coordinate system style
+    // a coordinate system is composed of a point and two vectors and their style data is the same 
+    // as the cooresponding primitives
+    const makeCoordStyle = (colorU, colorV, lineWidth = 1) => {
+        return {
+            u: {
+                shaft: {
+                    fillStyle: colorU,
+                    strokeStyle: colorU,
+                    lineStyle: {
+                        lineWidth,
+                    },
+                },
+                arrow: {
+                    fillStyle: colorU,
+                    strokeStyle: colorU,
+                    lineStyle: {
+                        lineWidth,
+                    },
+                }
+            },
+            v: {
+                shaft: {
+                    fillStyle: colorV,
+                    strokeStyle: colorV,
+                    lineStyle: {
+                        lineWidth,
+                    },
+                },
+                arrow: {
+                    fillStyle: colorV,
+                    strokeStyle: colorV,
+                    lineStyle: {
+                        lineWidth,
+                    },
+                }
+            },
+        };
+    };
+
+    // first system defined by the origin point and the two vectors attached
+    const c0 = scene.add(new DefCoordSystem(),
+        DefCoordSystem.fromValues({ origin: origin0, u: u0, v: v0 }), {
+        style: makeCoordStyle("rgb(255,0,0)", "rgb(0,0,255)", 3),
+    });
+
+    // we will display information on whether the specified coordinate system is right handed or not
+    const isRightHanded = scene.add(new DefCoordSystemOps(), DefCoordSystemOps.fromIsRightHanded(c0));
+
+    const textIsRH = scene.add(new DefText({
+        text: s => {
+            const h = s.value ? "right" : "left";
+            return `Coordinate system is ${h}-handed`;
+        }, ref: {
+            x: -2,
+            y: 4,
+        }
+    }), DefText.fromObjectRef({ obj: isRightHanded }), {
+        style: {
+            fillStyle: "black",
+            strokeStyle: "white",
+            outline: {
+                lineWidth: 8,
+            },
+            textStyle: {
+                font: "20px sans-serif",
+            }
+        }
+    });
+
+    const trans1 = scene.add(new DefVector({ x: 0, y: 0 }), EMPTY_INFO, { invisible });
+    const scale1 = scene.add(new DefVector({ x: 1, y: 1 }), EMPTY_INFO, { invisible });
+    const rot1 = scene.add(new DefNumber(0));
+
+
+    const c1 = scene.add(new DefCoordSystem(), DefCoordSystem.fromTransform({
+        parent: c0,
+        scale: scale1,
+        rotation: rot1,
+        translation: trans1,
+    }, {
+        translation: { x: 1.5, y: 0.5 },
+        scale: { x: 2, y: 0.5 },
+        rotation: alg.deg2rad(37),
+    }), {
+        style: makeCoordStyle("#D32CBE", "#2CD341", 2),
+    });
+
+    const t = scene.add(new DefNumber(0));
+
+    const c2 = scene.add(new DefCoordSystem(), DefCoordSystem.fromTransform({
+        rotation: t,
+        parent: c1,
+    }, {
+        translation: { x: 0.5, y: 1.5 },
+    }), {
+        style: makeCoordStyle("#3FACC0", "#C0533F")
+    });
+
+    // define a vector in the c2 coordinate system
+    const vc2local = scene.add(new DefVector({ x: 1, y: 1, ref: { x: 0.5, y: 0.5 } }), EMPTY_INFO, { invisible });
+
+    // make the coordinate system selectable
+    const csArray = [EMPTY, c0, c1, c2];
+    // we use array to specify: system is the world system itself
+    const coords = scene.add(new DefArray(), DefArray.fromObjects(csArray, { filterOutEmpty: false }), { invisible });
+    const localCs = scene.add(new DefSelect(0), DefSelect.fromObject(coords), { invisible });
+
+    // convert the vector to the global system by attaching it to a coordinate system
+    const vc2 = scene.add(new DefCoordSystemOps(), DefCoordSystemOps.fromPointOrVec(vc2local, localCs));
+
+    const decomposeCsSelect = scene.add(new DefSelect(1),
+        DefSelect.fromObject(coords), { invisible });
+    // as this might be empty, we put a unit coordinate system with this as its parent
+    // we do this, since we will use the axes and origin to display the projection on the axes
+    const decomposeCs = scene.add(new DefCoordSystem(),
+        DefCoordSystem.fromValues({ parent: decomposeCsSelect }),
+        { invisible });
+
+    const coordinatesVc2 = scene.add(new DefCoordSystemOps(),
+        DefCoordSystemOps.fromToCoordinates(vc2, decomposeCs), { invisible });
+
+    // we can now compute the points corresponding to the coordinates in the given system and draw lines to the ref and arrow tip
+    // this will only be used for display, so we just create an array
+    // and we will handle this in a function as there are a lot of lines
+    const projLines = scene.add(new DefFunc(deps => {
+        const { coords, cs } = deps;
+        // helper function for brevity
+        const va = p => DefCoordSystem.pointFromCoordSystem(p, cs);
+        const refLocal = coords.ref;
+        const tipLocal = Vec2.add(refLocal, coords);
+        const refW = va(refLocal);
+        const tipW = va(tipLocal);
+
+        // the coordinate points on the axes
+        const refUW = va(Vec2.vec2(refLocal.x, 0));
+        const refVW = va(Vec2.vec2(0, refLocal.y));
+
+        const tipUW = va(Vec2.vec2(tipLocal.x, 0));
+        const tipVW = va(Vec2.vec2(0, tipLocal.y));
+
+        // we also draw lines from the origin, so the projection lines are not floating in the air
+        // the min max range
+        const minU = Math.min(refLocal.x, tipLocal.x, 0);
+        const maxU = Math.max(refLocal.x, tipLocal.x, 0);
+
+        const minV = Math.min(refLocal.y, tipLocal.y, 0);
+        const maxV = Math.max(refLocal.y, tipLocal.y, 0);
+
+        const lu = va(Vec2.vec2(minU, 0));
+        const ru = va(Vec2.vec2(maxU, 0));
+
+        const lv = va(Vec2.vec2(0, minV));
+        const rv = va(Vec2.vec2(0, maxV));
+
+        // lines between
+        const lines = [
+            makeLine({ p0: refUW, p1: refW }),
+            makeLine({ p0: refVW, p1: refW }),
+
+            makeLine({ p0: tipUW, p1: tipW }),
+            makeLine({ p0: tipVW, p1: tipW }),
+
+            makeLine({ p0: lu, p1: ru }),
+            makeLine({ p0: lv, p1: rv }),
+        ];
+
+
+        return lines;
+    }), DefFunc.from({ coords: coordinatesVc2, cs: decomposeCs }), {
+        z: 2,
+        style: {
+            strokeStyle: "rgb(128,128,128)",
+            lineStyle: {
+                lineWidth: 2,
+                lineDash: [2],
+            }
+        }
+    });
+
+    // simple time update
+    const dt = 1 / 40;
+    const update = () => {
+        const tv = scene.get(t).value.value;
+        scene.update(t, new DefNumber(tv + dt * 0.5));
+        setTimeout(update, dt * 1000);
+
+    };
+    setTimeout(update, dt * 1000);
+
+    const sliderRot1 = makeUpdateSlider(v => {
+        scene.update(rot1, new DefNumber(v));
+    }, 0, 2 * Math.PI, 0, 100);
+    const sliderScaleX = makeUpdateSlider(v => {
+        let val = scene.get(scale1).value;
+
+        scene.update(scale1, new DefVector({ x: v, y: val.y }));
+    }, 0.1, 2, 1);
+    const sliderScaleY = makeUpdateSlider(v => {
+        let val = scene.get(scale1).value;
+
+        scene.update(scale1, new DefVector({ x: val.x, y: v }));
+    }, 0.1, 2, 1);
+
+    const sliderTransX = makeUpdateSlider(v => {
+        let val = scene.get(trans1).value;
+
+        scene.update(trans1, new DefVector({ x: v, y: val.y }));
+    }, -2, 2, 1.5);
+    const sliderTransY = makeUpdateSlider(v => {
+        let val = scene.get(trans1).value;
+
+        scene.update(trans1, new DefVector({ x: val.x, y: v }));
+    }, -2, 2, 0.5);
+
+    const sliderSelectCS = makeUpdateSlider(v => {
+        scene.update(localCs, new DefSelect(Math.floor(v)));
+    }, 0, csArray.length - 1, csArray.length - 1, csArray.length);
+    const sliderSelectDecompose = makeUpdateSlider(v => {
+        scene.update(decomposeCsSelect, new DefSelect(Math.floor(v)));
+    }, 0, csArray.length - 1, csArray.length - 1, csArray.length);
+
+    const checkboxNormU = makeCheckbox(scene.get(normalizeU0).value.value);
+    checkboxNormU.oninput = () => {
+        scene.update(normalizeU0, new DefBoolean(checkboxNormU.checked));
+    };
+    const checkboxNormV = makeCheckbox(scene.get(normalizeV0).value.value);
+    checkboxNormV.oninput = () => {
+        scene.update(normalizeV0, new DefBoolean(checkboxNormV.checked));
+    };
+    const makeHeadline = (text, level = 2) => {
+        const h = document.createElement(`h${level}`);
+        h.textContent = text;
+        return h;
+    }
+    const firstSystem = makeContainer(
+        makeHeadline("System 1", 3),
+        makeContainer(makeTextField("Normalize u:"), checkboxNormU),
+        makeContainer(makeTextField("Normalize v:"), checkboxNormV),
+    );
+
+
+    const options = makeContainer();
+    options.classList.add("flexContainer");
+
+    options.appendChild(firstSystem);
+
+    const secondSystem = makeContainer(
+        makeHeadline("System 2", 3),
+        makeContainer(makeTextField("Rotation angle:"), sliderRot1),
+        makeContainer(makeTextField("Scale x:"), sliderScaleX),
+        makeContainer(makeTextField("Scale y:"), sliderScaleY),
+        makeContainer(makeTextField("Translation x:"), sliderTransX),
+        makeContainer(makeTextField("Translation y:"), sliderTransY),
+    );
+
+    options.appendChild(secondSystem);
+    const localVector = makeContainer(
+        makeHeadline("Local vector", 3),
+        makeContainer(makeTextField("Define in coordinate system:"), sliderSelectCS),
+        makeContainer(makeTextField("Decompose with respect to coordinate system:"), sliderSelectDecompose),
+    );
+    options.appendChild(localVector);
+
+    container.appendChild(options);
+}
+
+
 export {
     controllableRectangle,
     reflectionRefraction,
     pythagoras,
     sat,
     smoothFunction,
+    coordinateSystems,
 };

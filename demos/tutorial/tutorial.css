@@ -2,3 +2,14 @@
     border: solid;
     border-color: gray;
 }
+
+.flexContainer {
+    display: flex;
+}
+
+.flexContainer div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px;
+}
