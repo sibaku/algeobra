@@ -1826,5 +1826,4 @@ export {
 
     registerAlgeobraIntersectors,
     intersectLine3Plane,
-    intersectLine3Plane,
 }
