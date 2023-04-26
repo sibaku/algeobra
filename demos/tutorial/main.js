@@ -14,6 +14,7 @@ document.body.onload = () => {
         tuts.sat,
         tuts.smoothFunction,
         tuts.coordinateSystems,
+        tuts.bezierSegment,
     ];
 
     for (const d of dm) {

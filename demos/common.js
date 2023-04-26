@@ -46,22 +46,36 @@ const makeSlider = (min, max, value) => {
 const mapFrom = (v, min, max) => (v - min) / (max - min);
 const mapTo = (v, min, max) => v * (max - min) + min;
 
-const makeUpdateSlider = (cb, min = 0, max = 1, value = min, steps = 100) => {
+const makeUpdateSlider = (cb, min = 0, max = 1, value = min, steps = 100, initialUpdate = true) => {
     const slider = makeSlider(1, steps,
         mapTo(mapFrom(value, min, max), 1, steps));
 
+    Object.defineProperty(slider, "mappedValue", {
+        get() {
+            // convert slider value into [0,1]
+            const t = mapFrom(parseInt(this.value), parseInt(this.min), parseInt(this.max));
+            return mapTo(t, min, max);
+        },
+        set(x) {
+            this.value = mapTo(mapFrom(x, min, max), parseInt(this.min), parseInt(this.max));
+        }
+    });
+
     slider.oninput = () => {
-        // convert slider value into [0,1]
-        const t = mapFrom(parseInt(slider.value), parseInt(slider.min), parseInt(slider.max));
-        const val = mapTo(t, min, max);
-        cb(val, slider);
+        const val = slider.mappedValue;
+        const ret = cb(val, slider);
+        if (ret !== undefined) {
+            slider.mappedValue = ret;
+        }
     };
 
-    slider.oninput();
+    if (initialUpdate) {
+        slider.oninput();
+    }
 
     return slider;
 }
 
 export {
-    makeContainer, makeCanvas, makeCheckbox, makeSpan, makeTextField, makeSlider, makeUpdateSlider
+    makeContainer, makeCanvas, makeCheckbox, makeSpan, makeTextField, makeSlider, makeUpdateSlider, mapFrom, mapTo,
 };
