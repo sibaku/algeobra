@@ -989,6 +989,22 @@ function subdivideBezierControlPoints(points, t) {
 }
 
 /**
+ * Computes the control points for a Bezier curve of the same degree as the given one that starts and ends at the given parameters of the original curve.
+ * @param {{Array<{x:Number, y:Number}>}} points The control points
+ * @param {Number} t0 The lower curve parameter in [0,1]
+ * @param {Number} t1 The upper curve parameter in [0,1]
+ * @returns {{Array<{x:Number, y:Number}>}} The new control points
+ */
+function subintervalBezierControlPoints(points, t0, t1) {
+    // divide for upper t
+    ({ left: points } = subdivideBezierControlPoints(points, t1));
+    // reparametrize lower t
+    let t = t0 / t1;
+    ({ right: points } = subdivideBezierControlPoints(points, t));
+    return points;
+}
+
+/**
  * Subdivides a Bezier curve in such a way, that the points can be drawn as line segments that do not differ more from the curve than the given error parameter
  * @param {{Array<{x:Number, y:Number}>}} points The Bezier control points
  * @param {Number} [eps] Subdivision error parameter
@@ -10352,6 +10368,7 @@ export {
     calcBezierPointsDerivative,
     deCastlejau,
     subdivideBezierControlPoints,
+    subintervalBezierControlPoints,
     subdivideBezierAdaptive,
     makeBoolean,
     makeNumber,
