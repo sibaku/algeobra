@@ -1688,7 +1688,7 @@ function demoTriangleCircles(container, canvas) {
 
 }
 
-function demoDeCastlejau(container, canvas) {
+function demoDeCasteljau(container, canvas) {
     const scene = new alg.GeometryScene();
 
     const diagram = new vis.DiagramCanvas({ x0: -3, y0: -3, x1: 3, y1: 3, flipY: true, canvas });
@@ -2815,7 +2815,7 @@ export {
     demoTrig,
     demoInscribedAngle,
     demoTriangleCircles,
-    demoDeCastlejau,
+    demoDeCasteljau,
     demoLens,
     demoArcTangents,
     demoCurveTangentNormals,

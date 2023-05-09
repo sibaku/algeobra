@@ -15,7 +15,7 @@ document.body.onload = () => {
         demos.demoTrig,
         demos.demoInscribedAngle,
         demos.demoTriangleCircles,
-        demos.demoDeCastlejau,
+        demos.demoDeCasteljau,
         demos.demoLens,
         demos.demoArcTangents,
         demos.demoCurveTangentNormals,

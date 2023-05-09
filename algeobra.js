@@ -944,12 +944,12 @@ function calcBezierPointsDerivative(points) {
 }
 
 /**
- * Computes a point on a Bezier curve using the de Castlejau algorithm
+ * Computes a point on a Bezier curve using the de Casteljau algorithm
  * @param {{Array<{x:Number, y:Number}>}} points The control points
  * @param {Number} t The curve parameter
  * @returns {{x:Number, y:Number}} The point on the curve
  */
-function deCastlejau(points, t) {
+function deCasteljau(points, t) {
     // to override values
     points = [...points];
     const n = points.length - 1;
@@ -6935,7 +6935,7 @@ class DefCurvePoint {
      * @returns {{x:Number, y:Number}} The resulting point
      */
     static bezierPoint(points, t) {
-        return deCastlejau(points, t);
+        return deCasteljau(points, t);
     }
     /**
      * Computes the point on a Bezier spline. 
@@ -6953,7 +6953,7 @@ class DefCurvePoint {
 
         const segPoints = getBezierSplineSegment(points, degree, idx);
 
-        return deCastlejau(segPoints, t);
+        return deCasteljau(segPoints, t);
     }
     /**
      * Computes the point on a curve. 
@@ -7154,7 +7154,7 @@ class DefCurveTangent {
      */
     static bezierTangent(points, t) {
         const qs = calcBezierPointsDerivative(points);
-        const tan = deCastlejau(qs, t);
+        const tan = deCasteljau(qs, t);
 
         return tan;
     }
@@ -7206,7 +7206,7 @@ class DefCurveTangent {
         const segPoints = getBezierSplineSegment(points, degree, idx);
         const qs = calcBezierPointsDerivative(segPoints);
 
-        return deCastlejau(qs, t);
+        return deCasteljau(qs, t);
 
     }
 
@@ -7487,7 +7487,7 @@ class DefCurveNormal {
     static bezierNormal(points, t) {
         // normal from tangent
         const qs = calcBezierPointsDerivative(points);
-        const tan = deCastlejau(qs, t);
+        const tan = deCasteljau(qs, t);
 
         return normal2D(tan);
     }
@@ -7508,7 +7508,7 @@ class DefCurveNormal {
         const segPoints = getBezierSplineSegment(points, degree, idx);
         const qs = calcBezierPointsDerivative(segPoints);
 
-        return normal2D(deCastlejau(qs, t));
+        return normal2D(deCasteljau(qs, t));
 
     }
 
@@ -10366,7 +10366,7 @@ export {
     rad2deg,
     calcBezierParameterOfPoint,
     calcBezierPointsDerivative,
-    deCastlejau,
+    deCasteljau,
     subdivideBezierControlPoints,
     subintervalBezierControlPoints,
     subdivideBezierAdaptive,
