@@ -10434,6 +10434,7 @@ export {
     DefCoordSystem,
     DefCoordSystemOps,
     DefNormalVector,
+    DefVectorOps,
     DefPerpendicularLine,
     DefParallelLine,
     DefReflection,
