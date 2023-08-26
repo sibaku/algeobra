@@ -4481,7 +4481,7 @@ class DefVectorOps {
     static fromTransform(a, { alpha = EMPTY, scale = EMPTY, normalize = EMPTY, ref = EMPTY, },
         defaultValues = {}) {
         const { alpha: alpha0 = 0, scale: scale0 = 1, normalize: normalize0 = false } = defaultValues;
-        return CreateInfo("tr", { a, alpha, scale, normalize, ref, }, {
+        return CreateInfo.new("tr", { a, alpha, scale, normalize, ref, }, {
             alpha: alpha0, scale: scale0, normalize: normalize0
         });
     }
@@ -4533,11 +4533,6 @@ class DefVectorOps {
 
             assertExistsAndNotOptional(a);
             assertType(a, TYPE_VECTOR);
-
-            if (!isParamEmpty(t0)) {
-                assertType(t0, TYPE_VECTOR);
-                t = t0;
-            }
 
             if (!isParamEmpty(alpha0)) {
                 assertType(alpha0, TYPE_NUMBER);
