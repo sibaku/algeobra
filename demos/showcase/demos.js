@@ -2807,6 +2807,110 @@ function demoDetectGround(container, canvas) {
 
 }
 
+
+function demoClip(container, canvas) {
+    const scene = new alg.GeometryScene();
+
+    const diagram = new vis.DiagramCanvas({ x0: -2, y0: -2, x1: 7, y1: 6, flipY: true, canvas });
+
+    const diagPainter = new vis.DiagramPainter(scene, diagram, {
+        bg: vis.NO_BACKGROUND_CONFIG,
+        autoResize: {
+            target: container,
+            keepAspect: false,
+            minWidth: canvas.width / 2,
+            widthFactor: 0.8,
+        }
+    });
+    const {
+        DefPoint,
+        DefVector,
+        DefLine,
+        DefPolygon,
+        DefAngle,
+        DefFunc,
+        makePolygon,
+    } = alg;
+
+    const invisible = true;
+
+    const p0 = scene.add(new DefPoint(-0.5, 2), EMPTY_INFO, {});
+    const p1 = scene.add(new DefPoint(-0.5, 3), EMPTY_INFO, {});
+
+    const line = scene.add(new DefLine({ leftOpen: true, rightOpen: true }), DefLine.fromPoints(p0, p1), {});
+
+    const poly0 = scene.add(new DefPolygon([
+        Vec2.new(-1, 1), Vec2.new(0, 1), Vec2.new(0, 2), Vec2.new(-1, 2)
+    ]), EMPTY_INFO, {});
+
+    const clip0 = scene.add(new DefPolygon(), DefPolygon.fromClipLine(poly0, line), {
+        style: {
+            strokeStyle: "rgb(0,0,255)",
+            fillStyle: "rgba(255,0,255,0.25)",
+        }
+    });
+
+    const q0 = scene.add(new DefPoint(1.5, 1), EMPTY_INFO, {});
+    const q1 = scene.add(new DefPoint(2.5, 2), EMPTY_INFO, {});
+    const v = scene.add(new DefVector(), DefVector.fromPoints(q0, q1), {});
+    const poly1 = scene.add(new DefPolygon([
+        Vec2.new(1, 1), Vec2.new(2, 1), Vec2.new(2, 2), Vec2.new(1, 2)
+    ]), EMPTY_INFO, {});
+    const clip1 = scene.add(new DefPolygon(), DefPolygon.fromClipPointNormal(poly1, { n: v }), {
+        style: {
+            strokeStyle: "rgb(0,0,255)",
+            fillStyle: "rgba(255,0,255,0.25)",
+        }
+    });
+
+    const r0 = scene.add(new DefPoint(3.5, 1.5), EMPTY_INFO, { invisible });
+    const r1 = scene.add(new DefPoint(4.5, 1.5), EMPTY_INFO, { invisible });
+    const r2 = scene.add(new DefPoint(3.5, 2.5), EMPTY_INFO, {});
+
+    const l01 = scene.add(new DefLine(), DefLine.fromPoints(r0, r1));
+    const l02 = scene.add(new DefLine(), DefLine.fromPoints(r0, r2));
+
+    const a = scene.add(new DefAngle(), DefAngle.fromPoints(r1, r0, r2), {});
+
+    const clipPolyBase = scene.add(new DefPolygon([
+        Vec2.new(-1, 0), Vec2.new(1, 0), Vec2.new(0.5, 0.5)
+    ]), EMPTY_INFO, { invisible });
+
+    const clipPoly = scene.add(new DefFunc(deps => {
+        const { poly, angle, p } = deps;
+
+        const ca = Math.cos(angle.value);
+        const sa = Math.sin(angle.value);
+
+        const points = poly.points.map(q => Vec2.add(p, Vec2.rotate(q, angle.value, ca, sa)));
+        return makePolygon({ points });
+
+    }), DefFunc.from({ poly: clipPolyBase, angle: a, p: r0 }), {
+        style: {
+            strokeStyle: "rgb(0,0,255)",
+            fillStyle: "rgba(0,0,0,0.0)",
+        }
+    });
+
+    const poly2 = scene.add(new DefPolygon([
+        Vec2.new(3, 1), Vec2.new(4, 1), Vec2.new(4, 2), Vec2.new(3, 2)
+    ]), EMPTY_INFO, {});
+
+    const clip2 = scene.add(new DefPolygon(), DefPolygon.fromClipPoly(poly2, clipPoly), {
+        style: {
+            strokeStyle: "rgb(0,0,255)",
+            fillStyle: "rgba(255,0,255,0.25)",
+        }
+    });
+    const manip = vis.PointManipulator.createForPointsAndHandles(scene, diagram.coordinateMapper, diagram.canvas,
+        [p0, p1, q0, q1, r2], Infinity);
+    onRemoved(canvas, () => {
+        manip.detach();
+        diagPainter.disconnect();
+    });
+
+}
+
 export {
     demoAddition,
     demoScale,
@@ -2820,4 +2924,5 @@ export {
     demoArcTangents,
     demoCurveTangentNormals,
     demoDetectGround,
+    demoClip,
 };

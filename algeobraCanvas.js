@@ -25,6 +25,7 @@ import {
     TYPE_BEZIER,
     TYPE_BEZIER_SPLINE,
     TYPE_TEXT,
+    TYPE_COLLECTION,
     DefPoint,
     GeometryScene,
     rad2deg,
@@ -2133,11 +2134,27 @@ function sortDrawables(scene) {
         }
         const { z = 0 } = properties;
 
-        drawables.push({
-            value,
-            z,
-            properties
-        });
+        if (value.type === TYPE_COLLECTION) {
+            const { objects, properties: props = [] } = value;
+
+            for (let i = 0; i < objects.length; i++) {
+                const pr = props[i] ? props[i] : properties;
+                const { zo = z } = pr;
+                drawables.push({
+                    value: objects[i],
+                    z: zo,
+                    properties: pr
+                });
+            }
+        } else {
+            drawables.push({
+                value,
+                z,
+                properties
+            });
+
+        }
+
 
     }
 
@@ -2262,7 +2279,7 @@ function createDiagramCanvasDrawFuncRegistry() {
             startAngle, endAngle,
             rotation, props.style);
     }
-
+   
     const reg = new DrawFuncRegistry({ typedDrawFuncs: tf });
 
     return reg;

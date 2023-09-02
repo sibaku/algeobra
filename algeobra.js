@@ -72,12 +72,22 @@ function createFromTemplate(base, properties) {
  */
 class Vec2 {
     /**
- * Create an object that can be treated as a 2D vector
- * @param {Number} x 
- * @param {Number} y 
- * @returns {{x:Number, y:Number}} A 2D vector
- */
+     * Create an object that can be treated as a 2D vector
+     * @param {Number} x 
+     * @param {Number} y 
+     * @returns {{x:Number, y:Number}} A 2D vector
+     */
     static vec2(x = 0, y = 0) {
+        return { x, y };
+    }
+
+    /**
+     * Create an object that can be treated as a 2D vector
+     * @param {Number} x 
+     * @param {Number} y 
+     * @returns {{x:Number, y:Number}} A 2D vector
+     */
+    static new(x = 0, y = 0) {
         return { x, y };
     }
     /**
@@ -757,6 +767,11 @@ const TYPE_BEZIER_SPLINE = "bezSpline";
 const TYPE_TEXT = "text";
 
 /**
+ * Type specifier for a collection type
+ */
+const TYPE_COLLECTION = "collection";
+
+/**
  * Specifies an INVALID value
  * This could be something like the intersection of objects that do not intersect
  */
@@ -1339,6 +1354,26 @@ function makeText({
 } = {}) {
     return {
         text, ref, type: TYPE_TEXT
+    };
+}
+
+/**
+ * Creates a collection type object of type TYPE_COLLECTION
+ * Any object that has the following fields can be treated as a collection value:
+ * { objects : Array, type = TYPE_COLLECTION }
+ * @param {Array} objects The objects
+ * @param {Array} [properties] The object properties
+ * @returns {{objects : Array, properties: Array, type: String}}
+ */
+function makeCollection(objects, properties) {
+    if (!Array.isArray(objects)) {
+        objects = [objects];
+    }
+    if (properties && !Array.isArray(properties)) {
+        properties = [properties];
+    }
+    return {
+        objects, properties, type: TYPE_COLLECTION
     };
 }
 
@@ -4164,6 +4199,105 @@ class ClosestPointRegistry {
     }
 }
 
+
+/**
+ * Computes the normal form of a plane.
+ * For a point p, you can compute whether it lies on the plane as: p.x * plane.x + p.y * plane.y + plane.d = 0
+ * @param {{x:Number,y:Number}} p A point on the plane
+ * @param {{x:Number,y:Number}} n The plane normal
+ * @returns {{x:Number,y:Number, d:Number}} The plane
+ */
+function computePlane(p, n) {
+
+    return {
+        x: n.x,
+        y: n.y,
+        d: -Vec2.dot(p, n)
+    };
+}
+/**
+ * Clip a polygon at a plane.
+ * The plane normal defines inside and outside. Points of the polygon that are outside are clipped.
+ * A plane can be created by the @see {@link computePlane} function, where you can see how it is defined.
+ * @param {Array<{x:Number, y:Number}>} points The polygon points
+ * @param {{x:Number, y:Number, d: Number}} plane The plane to clip at.
+ * @returns {Array<{x:Number, y:Number}>} The clipped polygon
+ */
+function clipPolygonAtPlane(points, plane) {
+
+    // Implementation of a step of the Sutherland-Hodgman algorithm
+    const pl = plane;
+    const output = [];
+
+    const size = points.length;
+    for (let i = 0; i < size; i++) {
+
+        const cur = points[i];
+        const ip = (i - 1 + points.length) % points.length;
+        const prev = points[ip];
+
+        // compute distance
+        const dc = Vec2.dot(pl, cur) + pl.d;
+        const dp = Vec2.dot(pl, prev) + pl.d;
+
+        // cur inside
+        if (dc >= 0.0) {
+            // prev outside
+            if (dp < 0.0) {
+                // intersect prev -> cur
+
+                const t = dp / (dp - dc);
+                const p = Vec2.add(prev, Vec2.scale(Vec2.sub(cur, prev), t));
+
+                output.push(p);
+            }
+
+            output.push(cur);
+        } else if (dp >= 0.0) {
+            // cur outside, prev inside
+            // intersect prev->cur
+
+            const t = dp / (dp - dc);
+            const p = Vec2.add(prev, Vec2.scale(Vec2.sub(cur, prev), t));
+
+            output.push(p);
+        }
+    }
+
+    points = output;
+
+    return points;
+}
+
+/**
+ * Clips a polygon against another.
+ * The clip polygon must be convex, while the polygon to be clipped may be concave.
+ * The clip polygon should be defined counter-clockwise.
+ * @param {Array<{x:Number, y:Number}>} points 
+ * @param {Array<{x:Number, y:Number}>} clipPoints
+ * @returns {Array<{x:Number, y:Number}>} The clipped polygon
+ */
+function clipPolygonAtPolygon(points, clipPoints) {
+
+    for (let i = 0; i < clipPoints.length; i++) {
+        if (points.length < 3) {
+            points = [];
+            break;
+        }
+        const ip = (i + 1) % clipPoints.length;
+        const a = clipPoints[i];
+        const b = clipPoints[ip];
+
+        const v = Vec2.sub(b, a);
+        const n = Vec2.normal2D(v);
+        const plane = computePlane(a, n);
+        points = clipPolygonAtPlane(points, plane);
+
+    }
+
+    return points;
+}
+
 /**
  * Checks whether an object is one of the types given
  * @param {{type: String}} obj The dependency to check
@@ -6659,7 +6793,7 @@ class DefPolarCoord {
      * @param {Number | Object} [params.alpha] Either the index or value of a TYPE_NUMBER. The angle
      * @returns {CreateInfo} The creation info
      */
-    static fromValues({ r = EMPTY, alpha = EMPTY }) {
+    static fromValues({ r = EMPTY, alpha = EMPTY } = {}) {
         return CreateInfo.new("v", { r, alpha });
     }
 
@@ -8372,6 +8506,39 @@ class DefPolygon {
     static fromLineStrip(lineStrip, attach = false) {
         return CreateInfo.new("ls", { lineStrip }, { attach });
     }
+
+    /**
+     * Computes a polygon by clipping another polygon at a line
+     * @param {Number | Object} poly Either the index or value of a TYPE_POLYGON. The polygon to be clipped
+     * @param {Number | Object} line Either the index or value of a TYPE_LINE. The line to be clipped at
+     * @returns {CreateInfo} The creation info
+     */
+    static fromClipLine(poly, line) {
+        return CreateInfo.new("cl", { poly, line });
+    }
+    /**
+       * Computes a polygon by clipping another polygon at a line given by a point and normal
+       * If the point is not given, the vectors reference point is used
+       * @param {Number | Object} poly Either the index or value of a TYPE_POLYGON. The polygon to be clipped
+       * @param {Object} params
+       * @param {Number | Object} [params.p] Either the index or value of a TYPE_POINT. A point on the clipping line
+       * @param {Number | Object} params.n Either the index or value of a TYPE_VECTOR. The clipping line normal
+       * @returns {CreateInfo} The creation info
+       */
+    static fromClipPointNormal(poly, { p = EMPTY, n } = {}) {
+        return CreateInfo.new("cpn", { poly, p, n });
+    }
+
+    /**
+    * Computes a polygon by clipping another polygon at a convex clip polygon
+    * @param {Number | Object} poly Either the index or value of a TYPE_POLYGON. The polygon to be clipped
+    * @param {Number | Object} clipPoly Either the index or value of a TYPE_POLYGON. The polygon to be clipped at. Must be convex
+    * @returns {CreateInfo} The creation info
+    */
+    static fromClipPoly(poly, clipPoly) {
+        return CreateInfo.new("clp", { poly, clipPoly });
+    }
+
     /**
      * Computes the polygon
      * @param {CreateInfo} createInfo The creation info
@@ -8418,7 +8585,39 @@ class DefPolygon {
             } else {
                 points = pointArray;
             }
-        } else if (createInfo !== EMPTY_INFO) {
+        } else if (createInfo.name === "cl") {
+            const { poly, line } = dependencies;
+            assertExistsAndNotOptional(poly, line);
+            assertType(poly, TYPE_POLYGON);
+            assertType(line, TYPE_LINE);
+            const { p0, p1 } = line;
+            const v = Vec2.sub(p1, p0);
+            const n = Vec2.normal2D(v);
+            const plane = computePlane(p0, n);
+            points = clipPolygonAtPlane(poly.points, plane);
+
+        } else if (createInfo.name === "cpn") {
+            const { poly, p, n } = dependencies;
+            assertExistsAndNotOptional(poly, n);
+            assertType(poly, TYPE_POLYGON);
+            assertType(n, TYPE_VECTOR);
+            let p0 = n.ref;
+            if (!isParamEmpty(p)) {
+                assertType(p, TYPE_POINT);
+                p0 = p;
+            }
+            const plane = computePlane(p0, n);
+            points = clipPolygonAtPlane(poly.points, plane);
+
+        } else if (createInfo.name === "clp") {
+            const { poly, clipPoly } = dependencies;
+            assertExistsAndNotOptional(poly, clipPoly);
+            assertType(poly, TYPE_POLYGON);
+            assertType(clipPoly, TYPE_POLYGON);
+
+            points = clipPolygonAtPolygon(poly.points, clipPoly.points);
+        }
+        else if (createInfo !== EMPTY_INFO) {
             throw new Error("No suitable constructor");
         }
 
@@ -9869,8 +10068,22 @@ class GeometryScene {
         this.#eventHandlers[GeometryScene.EVENT_UPDATE] = new EventType(GeometryScene.EVENT_UPDATE);
         this.#eventHandlers[GeometryScene.EVENT_PROPERTY] = new EventType(GeometryScene.EVENT_PROPERTY);
         this.#eventHandlers[GeometryScene.EVENT_REMOVE] = new EventType(GeometryScene.EVENT_REMOVE);
+        this.validateLoopFree = true;
     }
 
+    /**
+     * Get the toggle for whether loops should be validated
+     */
+    get validateLoopFree() {
+        return this._validateLoopFree;
+    }
+    /**
+     * Set the toggle for whether loops should be validated
+     * @param {Boolean} validate The toggle value
+     */
+    set validateLoopFree(validate) {
+        this._validateLoopFree = validate;
+    }
     /**
      * Register a callback.
      * Event names are given as the static fields EVENT_UPDATE, EVENT_PROPERTY, EVENT_REMOVE
@@ -10151,7 +10364,7 @@ class GeometryScene {
 
         if (prevCreateInfo) {
 
-            if (this.#wouldCreateLoop(index, createInfo)) {
+            if (this.validateLoopFree && this.#wouldCreateLoop(index, createInfo)) {
                 throw new Error(`Adding element ${index} with dependencies[${JSON.stringify(createInfo)}] would create a loop`);
             }
 
@@ -10329,7 +10542,6 @@ class GeometryScene {
     }
 }
 
-
 export {
     // variables
     TYPE_BOOLEAN,
@@ -10347,6 +10559,7 @@ export {
     TYPE_BEZIER,
     TYPE_BEZIER_SPLINE,
     TYPE_TEXT,
+    TYPE_COLLECTION,
     INVALID,
     EMPTY,
     EMPTY_INFO,
@@ -10379,6 +10592,7 @@ export {
     makeArc,
     makeEllipse,
     makeText,
+    makeCollection,
     objectToString,
     normalizeAngle,
     calcAngle,
@@ -10417,8 +10631,11 @@ export {
     closestPointArc,
     closestPointBezier,
     assertType,
+    computePlane,
+    clipPolygonAtPlane,
+    clipPolygonAtPolygon,
 
-    // clases
+    // classes
     Vec2,
     Complex,
     Roots,
