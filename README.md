@@ -54,19 +54,25 @@ Demos to use as reference can be found in the demo directory and branch [Demo br
 
 ## Tutorials
 
-Tutorial code can be found in the demo branch in the demo/tutorial directory or [tutorial code](https://github.com/sibaku/algeobra/tree/demos/demos/tutorial).
+Tutorial code for the below examples and more can be found in the demos directory.
 
-Additional tutorials for the WIP 3D module can be found under demo/demos3d.
+Additional tutorials for the WIP 3D module can be found under demos/demos3d.
 
-You will need a local server to open the HTML/load the module files. If you just want to have a look, JSFiddle versions are listed below, so you can look at it directly in the browser.
+You will need a local server to open the HTML/load the module files. If you just want to have a look, JSFiddle versions are listed below, so you can look at it directly in the browser. The demo source files have the same structure as the given fiddles, so you can just copy past the functions if you want to try them out online.
 
-The following shows a list of the current tutorials that you can find in the code
+The following shows a list of somne of the current tutorials/demos that you can find in the code
 
 ### An adjustable rectangle with side lengths
 
 JSFiddle version of the code: [Fiddle](https://jsfiddle.net/j3s7tmL6/)
 
 <img src="../assets/img/tut_rect.gif" alt="Adjustable rectangle" width="50%"></img>
+
+### The incircle and outcircle of a triangle (with SVG download button)
+
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/kjsL84r0/)
+
+<img src="../assets/img/triangle_circles.gif" alt="Incircle and outcircle of a triangle" width="50%"></img>
 
 ### Reflection and refraction
 
