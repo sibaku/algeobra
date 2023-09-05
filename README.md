@@ -20,7 +20,7 @@ There are currently three files:
 
 Here you can have a look at a basic interactive diagram and the code used to generate it. Two draggable points are created and a vector is drawn between them:
 
-[Demo JSFiddle](https://jsfiddle.net/y9zhxeav/)
+[Demo JSFiddle](https://jsfiddle.net/hz3wu5b0/)
 
 ## Examples
 
@@ -33,7 +33,7 @@ Here you can see a few example diagrams created with the library. You can also s
 <img src="../assets/img/inoutcircle.png" alt="Demo in and outcircle" width="30%"></img>
 <img src="../assets/img/lens.png" alt="Demo lens" width="30%"></img>
 
-The code that was used to generate those and more demos can be found in the demo branch [Demo branch](https://github.com/sibaku/algeobra/tree/demos). It is mostly uncommented, though it should give a good overview over a lot of features.
+The code that was used to generate those and more demos can be found in the demos directory. It is mostly uncommented, though it should give a good overview over a lot of features.
 
 ## General overview
 
@@ -64,25 +64,25 @@ The following shows a list of the current tutorials that you can find in the cod
 
 ### An adjustable rectangle with side lengths
 
-JSFiddle version of the code: [Fiddle](https://jsfiddle.net/bk7h84gy/1/)
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/j3s7tmL6/)
 
 <img src="../assets/img/tut_rect.gif" alt="Adjustable rectangle" width="50%"></img>
 
 ### Reflection and refraction
 
-JSFiddle version of the code: [Fiddle](https://jsfiddle.net/8xbf130z/3/)
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/v83zsmt0/)
 
 <img src="../assets/img/reflect_refract.gif" alt="Adjustable rectangle" width="50%"></img>
 
 ### Pythagoras
 
-JSFiddle version of the code: [Fiddle](https://jsfiddle.net/xrmhjovc/)
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/kunyjsz2/)
 
 <img src="../assets/img/pythag.gif" alt="Pythagoras" width="50%"></img>
 
 ### Separating axis theorem (SAT)
 
-JSFiddle version of the code: [Fiddle](https://jsfiddle.net/t486v2do/)
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/L4r6ktnh/1/)
 
 <img src="../assets/img/sat.gif" alt="SAT" width="50%"></img>
 
@@ -100,6 +100,6 @@ JSFiddle version of the code: [Fiddle](https://jsfiddle.net/twqcasef/)
 
 ### Coordinate systems
 
-JSFiddle version of the code: [Fiddle](https://jsfiddle.net/mhwd3a5s/)
+JSFiddle version of the code: [Fiddle](https://jsfiddle.net/0wusheqb/)
 
 <img src="../assets/img/coord_systems.gif" alt="Coordinate systems" width="50%"></img>
