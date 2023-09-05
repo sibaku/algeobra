@@ -34,6 +34,8 @@ import {
     Vec2 as v2,
     createFromTemplate,
     subdivideBezierAdaptive,
+    Vec2,
+    normalizeAngle,
 } from "./algeobra.js";
 
 /**
@@ -83,7 +85,7 @@ const styles = {
 
         text: {
             fillStyle: "rgb(0,0,0)",
-            strokeStyle: "rgb(0,0,0)",
+            strokeStyle: "rgba(0,0,0,0)",
             outline: {
                 lineWidth: 1.0,
                 lineCap: "butt",
@@ -380,8 +382,8 @@ const BASIC_BACKGROUND_CONFIG = {
                 fillStyle: "rgb(192,192,192)",
                 textStyle: {
                     font: "10px sans-serif",
-                    textAlign: "start",
-                    textBaseline: "alphabetic",
+                    textAlign: "center",
+                    textBaseline: "hanging",
                     direction: "inherit",
                     fontKerning: "auto",
                 },
@@ -418,8 +420,8 @@ const BASIC_BACKGROUND_CONFIG = {
                 fillStyle: "rgb(192,192,192)",
                 textStyle: {
                     font: "10px sans-serif",
-                    textAlign: "start",
-                    textBaseline: "alphabetic",
+                    textAlign: "right",
+                    textBaseline: "middle",
                     direction: "inherit",
                     fontKerning: "auto",
                 },
@@ -841,6 +843,660 @@ function clipLineAtScreen(coordinateMapper, x0, y0, x1, y1, leftOpen, rightOpen)
 
 }
 
+
+class DrawPath {
+
+    static MOVE = 1;
+    static LINE_TO = 2;
+    static ARC = 3;
+    static ELLIPSE = 4;
+    static CLOSE = 5;
+    static QUAD_BEZIER = 6;
+    static CUBIC_BEZIER = 7;
+
+    constructor() {
+        this.elements = [];
+    }
+
+    static new() {
+        return new DrawPath();
+    }
+
+    reset() {
+        this.elements = [];
+        return this;
+    }
+
+    moveTo(x, y) {
+        this.elements.push({
+            type: DrawPath.MOVE,
+            x, y
+        });
+        return this;
+    }
+    lineTo(x, y) {
+        this.elements.push({
+            type: DrawPath.LINE_TO,
+            x, y
+        });
+        return this;
+    }
+
+    close() {
+        this.elements.push({
+            type: DrawPath.CLOSE
+        });
+        return this;
+    }
+
+    arc(x, y, radius, startAngle, endAngle, counterclockwise = false) {
+        this.elements.push({
+            type: DrawPath.ARC,
+            x, y, radius, startAngle, endAngle, counterclockwise
+        });
+        return this;
+    }
+
+    ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, counterclockwise = false) {
+        this.elements.push({
+            type: DrawPath.ELLIPSE,
+            x, y, radiusX, radiusY, rotation, startAngle, endAngle, counterclockwise
+        });
+        return this;
+    }
+
+    quadraticBezier(x1, y1, x2, y2) {
+        this.elements.push({
+            type: DrawPath.QUAD_BEZIER,
+            x1, y1, x2, y2
+        });
+        return this;
+    }
+    cubicBezier(x1, y1, x2, y2, x3, y3) {
+        this.elements.push({
+            type: DrawPath.CUBIC_BEZIER,
+            x1, y1, x2, y2, x3, y3
+        });
+        return this;
+    }
+
+}
+
+/**
+ * Generic output for drawing paths
+ */
+class PathOutput {
+
+    /**
+     * Begin the current output frame
+     */
+    begin() { }
+
+    /**
+     * Finish the current output frame
+     */
+    end() { }
+
+    /**
+     * Width of the output surface
+     */
+    get width() {
+        return 0;
+    }
+
+    /**
+     * Height of the output surface
+     */
+    get height() {
+        return 0;
+    }
+
+    /**
+      * Draw a given path 
+      * @param {DrawPath} path The path to be drawn
+      * @param {Object} params The style
+      * @param {Boolean} params.fill Whether to fill or not
+      * @param {Boolean} params.stroke Whether to stroke or not
+      * @param {Object} params.style The style
+      */
+    drawPath(path, { fill = true, stroke = true, style = {} } = {}) { }
+
+    /**
+     * Draw a rectangle
+     * @param {Number} x The lower x coordinate
+     * @param {Number} y The lower y coordinate
+     * @param {Number} width The width
+     * @param {Number} height The height
+     * @param {Object} params The style
+     * @param {Boolean} params.fill Whether to fill or not
+     * @param {Boolean} params.stroke Whether to stroke or not
+     * @param {Object} params.style The style
+     */
+    drawRect(x, y, width, height, { fill = true, stroke = true, style = {} } = {}) {
+        const path = new DrawPath();
+        path.moveTo(x, y);
+        path.lineTo(x + width, y);
+        path.lineTo(x + width, y + height);
+        path.lineTo(x, y + height);
+        path.close();
+
+        this.drawPath(path, { fill, stroke, style });
+    }
+
+    /**
+     * Draw a line
+     * @param {Number} x0 The start x coordinate
+     * @param {Number} y0 The start y coordinate
+     * @param {Number} x1 The end x coordinate
+     * @param {Number} y1 The end y coordinate
+     * @param {Object} params The style
+     * @param {Boolean} params.fill Whether to fill or not
+     * @param {Boolean} params.stroke Whether to stroke or not
+     * @param {Object} params.style The style
+     */
+    drawLine(x0, y0, x1, y1, { fill = true, stroke = true, style = {} } = {}) {
+        const path = new DrawPath();
+
+        path.moveTo(x0, y0);
+        path.lineTo(x1, y1);
+
+        this.drawPath(path, { fill, stroke, style });
+
+    }
+    /**
+     * Draw text
+     * @param {DrawPath} text The text to be drawn
+     * @param {Object} params The style
+     * @param {Boolean} params.fill Whether to fill or not
+     * @param {Boolean} params.stroke Whether to stroke or not
+     * @param {Object} params.style The style
+     */
+    drawText(text, { fill = true, stroke = true, style = {} } = {}) { }
+
+    /**
+     * Start a group
+     */
+    beginGroup() { }
+    /**
+     * End a group
+     */
+    endGroup() { }
+}
+
+/**
+ * Path output for a HTML canvas element
+ * 
+ * Can be resized
+ */
+class CanvasPathOutput extends PathOutput {
+
+    #canvas;
+    #ctx;
+
+    /**
+     * 
+     * @param {HTMLCanvasElement} canvas The canvas to draw on
+     */
+    constructor(canvas) {
+        super();
+        this.#canvas = canvas;
+        this.#ctx = canvas.getContext("2d");
+    }
+
+    get width() {
+        return this.#canvas.width;
+    }
+    get height() {
+        return this.#canvas.height;
+    }
+    set width(w) {
+        this.#canvas.width = w;
+    }
+    set height(h) {
+        this.#canvas.height = h;
+    }
+
+    #applyStyle(style) {
+        const ctx = this.#ctx;
+
+        ctx.fillStyle = style.fillStyle ? style.fillStyle : ctx.fillStyle;
+        ctx.strokeStyle = style.strokeStyle ? style.strokeStyle : ctx.strokeStyle;
+        ctx.font = style.font ? style.font : ctx.font;
+        ctx.lineWidth = style.lineWidth ? style.lineWidth : ctx.lineWidth;
+        ctx.textAlign = style.textAlign ? style.textAlign : ctx.textAlign;
+        ctx.textBaseline = style.textBaseline ? style.textBaseline : ctx.textBaseline;
+        ctx.wordSpacing = style.wordSpacing ? style.wordSpacing : ctx.wordSpacing;
+        ctx.miterLimit = style.miterLimit ? style.miterLimit : ctx.miterLimit;
+        ctx.lineJoin = style.lineJoin ? style.lineJoin : ctx.lineJoin;
+        ctx.lineDashOffset = style.lineDashOffset ? style.lineDashOffset : ctx.lineDashOffset;
+        ctx.lineCap = style.lineCap ? style.lineCap : ctx.lineCap;
+        ctx.letterSpacing = style.letterSpacing ? style.letterSpacing : ctx.letterSpacing;
+        ctx.fontKerning = style.fontKerning ? style.fontKerning : ctx.fontKerning;
+        ctx.direction = style.direction ? style.direction : ctx.direction;
+        if (style.lineDash) {
+            ctx.setLineDash(style.lineDash);
+        }
+
+    }
+
+    begin() {
+        this.#ctx.clearRect(0, 0, this.#ctx.canvas.width, this.#ctx.canvas.height);
+    }
+
+
+    drawPath(path, { fill = true, stroke = true, style = {} } = {}) {
+        if (!path) {
+            return;
+        }
+        const ctx = this.#ctx;
+
+        ctx.save();
+        this.#applyStyle(style);
+
+        ctx.beginPath();
+        for (let el of path.elements) {
+            const type = el.type;
+            if (type === DrawPath.MOVE) {
+                ctx.moveTo(el.x, el.y);
+            } else if (type === DrawPath.LINE_TO) {
+                ctx.lineTo(el.x, el.y);
+            } else if (type === DrawPath.ARC) {
+                ctx.arc(el.x, el.y, el.radius, el.startAngle, el.endAngle, el.counterclockwise);
+            } else if (type === DrawPath.ELLIPSE) {
+                ctx.ellipse(el.x, el.y, el.radiusX, el.radiusY, el.rotation, el.startAngle, el.endAngle, el.counterclockwise);
+            } else if (type === DrawPath.CLOSE) {
+                ctx.closePath();
+            } else if (type === DrawPath.QUAD_BEZIER) {
+                ctx.quadraticCurveTo(el.x1, el.y1, el.x2, el.y2);
+            } else if (type === DrawPath.CUBIC_BEZIER) {
+                ctx.bezierCurveTo(el.x1, el.y1, el.x2, el.y2, el.x3, el.y3);
+            }
+        }
+
+
+        if (fill) {
+            ctx.fill();
+        }
+        if (stroke) {
+            ctx.stroke();
+        }
+
+        ctx.restore();
+
+    }
+
+    drawText(text, x, y, { fill = true, stroke = false, style = {} } = {}) {
+        const ctx = this.#ctx;
+
+        ctx.save();
+
+        this.#applyStyle(style);
+
+        if (typeof text !== "string") {
+            text = "" + text;
+        }
+        // // split lines
+        const lines = text.split("\n");
+
+        const metrics = ctx.measureText(text);
+        let lineHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+
+        for (let l of lines) {
+            if (stroke) {
+                ctx.strokeText(l, x, y);
+            }
+
+            if (fill) {
+                ctx.fillText(l, x, y);
+            }
+            y += lineHeight;
+        }
+
+
+
+
+        ctx.restore();
+    }
+
+}
+
+/**
+ * Path output to create an SVG document
+ */
+class SvgPathOutput extends PathOutput {
+    #width;
+    #height;
+
+    #document;
+
+    // used to measure text
+    #canvas;
+    #ctx;
+
+    /**
+     * 
+     * @param {Number} [width] The width
+     * @param {Number} [aspectRatio] The aspect ratio
+     */
+    constructor(width = 100, aspectRatio = 1) {
+        super();
+        this.#width = width;
+        this.#height = width / aspectRatio;
+
+        this.#document = "";
+
+        this.#canvas = document.createElement("canvas");
+        this.#canvas.width = 1;
+        this.#canvas.height = 1;
+        this.#ctx = this.#canvas.getContext("2d");
+    }
+
+    begin() {
+        this.#document = `<svg version="1.1"
+        width="${this.width}" height="${this.height}"
+        xmlns="http://www.w3.org/2000/svg">\n`;
+    }
+    end() {
+
+        this.#document += "</svg>";
+    }
+    get width() {
+        return this.#width;
+    }
+    get height() {
+        return this.#height;
+    }
+
+    /**
+     * Get the SVG xml string for the current document
+     * @returns {String} The current xml document
+     */
+    get document() {
+        return this.#document;
+    }
+
+    beginGroup() {
+        this.#document += "<g>\n";
+    }
+    endGroup() {
+        this.#document += "</g>\n";
+
+    }
+
+    #getRGBA(styleString) {
+        const valRegex = /([\.\d]+)/g;
+        const vals = styleString.match(valRegex);
+        const color = { r: 0, g: 0, b: 0, a: 1 };
+
+        if (vals.length > 2) {
+            color.r = parseInt(vals[0]) || 0;
+            color.g = parseInt(vals[1]) || 0;
+            color.b = parseInt(vals[2]) || 0;
+            if (vals.length > 3) {
+                color.a = parseFloat(vals[3]) || 0.0;
+            }
+        }
+
+        return color;
+    }
+
+    #computeStyle(style, fill, stroke) {
+        const div = document.createElement("div");
+        div.style.color = style.fillStyle;
+        div.style.font = style.font;
+        document.body.appendChild(div);
+
+        const compStyle = window.getComputedStyle(div);
+        const fillRGBA = this.#getRGBA(compStyle.color);
+        div.style.color = style.strokeStyle;
+        const strokeRGBA = this.#getRGBA(compStyle.color);
+
+        document.body.removeChild(div);
+
+        let result = [];
+
+        if (stroke) {
+            result.push(`stroke="rgb(${strokeRGBA.r},${strokeRGBA.g},${strokeRGBA.b})"`);
+            result.push(`stroke-opacity="${strokeRGBA.a}"`);
+        } else {
+            result.push(`stroke="none"`);
+        }
+        if (fill) {
+            result.push(`fill="rgb(${fillRGBA.r},${fillRGBA.g},${fillRGBA.b})"`);
+            result.push(`fill-opacity="${fillRGBA.a}"`);
+        } else {
+            result.push(`fill="none"`);
+        }
+
+        if (style.lineWidth) {
+            result.push(`stroke-width="${style.lineWidth}"`);
+        }
+
+        if (style.lineCap) {
+            result.push(`stroke-linecap="${style.lineCap}"`);
+        }
+        if (style.lineDash) {
+            result.push(`stroke-dasharray="${style.lineDash.join(",")}"`);
+        }
+
+        if (style.miterLimit) {
+            result.push(`stroke-miterlimit="${style.miterLimit}"`);
+        }
+        if (style.lineDashOffset) {
+            result.push(`stroke-dashoffset="${style.lineDashOffset}"`);
+        }
+        if (style.lineJoin) {
+            result.push(`stroke-linejoin="${style.lineJoin}"`);
+        }
+
+        if (style.textAlign) {
+
+            // incorrect for non-left-to-right languages, but this is hard to emulate without a left/right attribute value...
+            // TODO make generic
+
+            const replacement = {
+                start: "start",
+                center: "middle",
+                end: "end",
+                left: "start",
+                right: "end",
+            };
+
+            const r = replacement[style.textAlign];
+            if (r) {
+                result.push(`text-anchor="${r}"`);
+            }
+        }
+
+        if (style.textBaseline) {
+
+            const replacement = {
+                top: "text-top",
+                hanging: "hanging",
+                middle: "central",
+                alphabetic: "alphabetic",
+                ideographic: "ideographic",
+                bottom: "text-bottom",
+            };
+
+            const r = replacement[style.textBaseline];
+            if (r) {
+                result.push(`dominant-baseline="${r}"`);
+            }
+        }
+        const styleAttrib = [];
+        if (style.font) {
+            styleAttrib.push(`font: ${style.font}`);
+        }
+
+        if (styleAttrib) {
+            result.push(`style="${styleAttrib.join(";")}"`);
+        }
+
+        return result.join(" ");
+
+    }
+
+    drawPath(path, { fill = true, stroke = true, style = {} } = {}) {
+        if (!path) {
+            return;
+        }
+
+        const elements = [];
+        for (let el of path.elements) {
+            const type = el.type;
+            if (type === DrawPath.MOVE) {
+                elements.push(`M ${el.x} ${el.y}`);
+            } else if (type === DrawPath.LINE_TO) {
+                elements.push(`L ${el.x} ${el.y}`);
+            } else if (type === DrawPath.ARC) {
+                // TODO could be subsumed into ellipse code
+                const turns = Math.abs((el.endAngle - el.startAngle) / (2 * Math.PI));
+
+                let sa = normalizeAngle(el.startAngle);
+                let ea = normalizeAngle(el.endAngle);
+                let ccw = el.counterclockwise;
+
+                if (Math.abs(sa - ea) < 1E-7 && turns >= 1) {
+                    // full turns detected
+                    ea += (ccw ? -1 : 1) * 2 * Math.PI;
+                }
+                let delta = ea - sa;
+                // number of segments
+                const n = 3;
+
+                // special cases for wrap
+                if (ccw && ea > sa) {
+                    sa += 2 * Math.PI;
+                    delta = ea - sa;
+                } else if (!ccw && ea < sa) {
+                    ea += 2 * Math.PI;
+                    delta = ea - sa;
+                }
+
+
+                let points = [];
+                for (let i = 0; i <= n; i++) {
+                    const a = sa + delta * i / n;
+                    points.push(
+                        { x: Math.cos(a) * el.radius + el.x, y: Math.sin(a) * el.radius + el.y }
+                    );
+                }
+
+
+                elements.push(`M ${points[0].x} ${points[0].y}`);
+                for (let i = 1; i < points.length; i++) {
+                    elements.push(`A ${el.radius} ${el.radius} 0 0 ${ccw ? 0 : 1} ${points[i].x} ${points[i].y}`);
+
+                }
+            } else if (type === DrawPath.ELLIPSE) {
+                const turns = Math.abs((el.endAngle - el.startAngle) / (2 * Math.PI));
+                let sa = normalizeAngle(el.startAngle);
+                let ea = normalizeAngle(el.endAngle);
+                let ccw = el.counterclockwise;
+
+                if (Math.abs(sa - ea) < 1E-7 && turns >= 1) {
+                    // full turns detected
+                    ea += (ccw ? -1 : 1) * 2 * Math.PI;
+                }
+                let delta = ea - sa;
+
+                // special cases for wrap
+                if (ccw && ea > sa) {
+                    sa += 2 * Math.PI;
+                    delta = ea - sa;
+                } else if (!ccw && ea < sa) {
+                    ea += 2 * Math.PI;
+                    delta = ea - sa;
+                }
+
+                // number of segments
+                const n = 3;
+
+                const points = [];
+                for (let i = 0; i <= n; i++) {
+                    const a = el.startAngle + delta * i / n;
+                    points.push(Vec2.add(el, Vec2.rotate(Vec2.new(Math.cos(a) * el.radiusX, Math.sin(a) * el.radiusY), el.rotation)));
+                }
+                elements.push(`M ${points[0].x} ${points[0].y}`);
+                for (let i = 1; i < points.length; i++) {
+                    elements.push(`A ${el.radiusX} ${el.radiusY} ${rad2deg(el.rotation)} 0 ${ccw ? 0 : 1} ${points[i].x} ${points[i].y}`);
+
+                }
+            } else if (type === DrawPath.CLOSE) {
+                elements.push("Z");
+            } else if (type === DrawPath.QUAD_BEZIER) {
+                elements.push(`Q ${el.x1} ${el.y1}, ${el.x2} ${el.y2}`);
+            } else if (type === DrawPath.CUBIC_BEZIER) {
+                elements.push(`C ${el.x1} ${el.y1}, ${el.x2} ${el.y2}, ${el.x3} ${el.y3}`);
+            }
+        }
+
+        const pathSvg = elements.join(" ");
+        const pathStyle = this.#computeStyle(style, fill, stroke);
+        this.#document += `<path d="${pathSvg}" ${pathStyle}/>\n`
+    }
+
+    drawText(text, x, y, { fill = true, stroke = false, style = {} } = {}) {
+
+        if (typeof text !== "string") {
+            text = "" + text;
+        }
+
+        // // split lines
+        const lines = text.split("\n");
+
+        const ctx = this.#ctx;
+        ctx.save();
+        if (style.font) {
+            ctx.font = style.font;
+        }
+        if (style.lineWidth) {
+            ctx.lineWidth = style.lineWidth;
+        }
+        if (style.textAlign) {
+            ctx.textAlign = style.textAlign;
+        }
+        if (style.textBaseline) {
+            ctx.textBaseline = style.textBaseline;
+        }
+        if (style.direction) {
+            ctx.direction = style.direction;
+        }
+        if (style.fontKerning) {
+            ctx.fontKerning = style.fontKerning;
+        }
+        const metrics = ctx.measureText(text);
+        ctx.restore();
+        let lineHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+
+        this.#document += "<g>\n";
+
+
+        const outlineStyle = this.#computeStyle(style, false, stroke);
+        const fillStyle = this.#computeStyle(style, fill, false);
+
+        let innerText = text;
+        if (lines.length > 1) {
+            let offset = y;
+            const subtexts = [];
+            for (let l of lines) {
+                subtexts.push(`<tspan x="${x}" y="${offset}">${l}</tspan>`);
+                offset += lineHeight;
+            }
+
+            innerText = "\n" + subtexts.join("\n");
+        }
+
+        this.#document += `<text x="${x}" y="${y}" ${outlineStyle}>${innerText}</text>\n`;
+        this.#document += `<text x="${x}" y="${y}" ${fillStyle}>${innerText}</text>\n`;
+
+        this.#document += "</g>\n";
+
+    }
+
+}
+
 /**
  * A helper class to handle coordinate transformations between an output surface and an abstract coordinate space
  */
@@ -1068,7 +1724,7 @@ class DiagramCanvas {
      * @param {Number} [params.x1] The x end
      * @param {Number} [params.x1] The y end
      * @param {Boolean} [params.flipY] Specifies whether the y axis should be flipped
-     * @param {HTMLCanvasElement} params.canvas The output canvas
+     * @param {HTMLCanvasElement | PathOutput} params.canvas The output canvas
      */
     constructor({
         x0 = 0,
@@ -1080,11 +1736,10 @@ class DiagramCanvas {
     } = {}) {
 
         this.flipY = flipY;
-        this.canvas = canvas;
 
-        this.context = canvas.getContext("2d");
+        this.output = canvas instanceof HTMLCanvasElement ? new CanvasPathOutput(canvas) : canvas;
         this.coordinateMapper = new CoordinateMapper({
-            x0, y0, x1, y1, flipY, width: canvas.width, height: canvas.height,
+            x0, y0, x1, y1, flipY, width: this.output.width, height: this.output.height,
         });
 
         this.subdivisionThreshold = 4;
@@ -1107,24 +1762,32 @@ class DiagramCanvas {
     }
 
     notifyCanvasSizeChanged() {
-        this.coordinateMapper.updateSurface(this.canvas.width, this.canvas.height);
+        this.coordinateMapper.updateSurface(this.output.width, this.output.height);
     }
     /**
      * Clear the canvas
      * @param {Object} params
      * @param {Boolean} params.fillAlpha If true, the canvas will be filled with opaque white, otherwise it will be cleared
      */
-    clear({
+    begin({
         fillAlpha = true,
     } = {}) {
+
+        this.output.begin();
+
         if (fillAlpha) {
-            this.context.save();
-            this.context.fillStyle = "rgb(255,255,255)";
-            this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            this.context.restore();
-        } else {
-            this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.output.drawRect(0, 0, this.output.width, this.output.height, {
+                stroke: false,
+                fill: true,
+                style: {
+                    fillStyle: "rgb(255,255,255)"
+                }
+            });
         }
+    }
+
+    end() {
+        this.output.end();
     }
 
 
@@ -1176,7 +1839,9 @@ class DiagramCanvas {
         const w = x1 - x0;
         const h = y1 - y0;
 
-        const { canvas, context: ctx } = this;
+        const { output } = this;
+
+        output.beginGroup();
 
         const cMap = this.coordinateMapper;
 
@@ -1184,51 +1849,42 @@ class DiagramCanvas {
 
             const { strokeStyle, lineStyle } = grid;
 
-            ctx.save();
-            this.#applyLineStyle(lineStyle);
-
-            ctx.strokeStyle = strokeStyle;
+            const style = Object.assign({ strokeStyle }, lineStyle);
 
             const { xticks, yticks } = grid;
 
             let xOffsets = [];
 
             if (typeof (xticks) === "number") {
-                xOffsets = makeTicks(xticks, x0, w, false, 0, canvas.width);
+                xOffsets = makeTicks(xticks, x0, w, false, 0, output.width);
             } else if (Array.isArray(xticks)) {
-                xOffsets = xticks.map(v => [v, (v - x0) / w * canvas.width]);
+                xOffsets = xticks.map(v => [v, (v - x0) / w * output.width]);
             }
 
             let yOffsets = [];
 
             if (typeof (yticks) === "number") {
-                yOffsets = makeTicks(yticks, y0, h, flipY, 0, canvas.height);
+                yOffsets = makeTicks(yticks, y0, h, flipY, 0, output.height);
             } else if (Array.isArray(yticks)) {
-                yOffsets = yticks.map(v => [v, (v - y0) / h * canvas.height]);
+                yOffsets = yticks.map(v => [v, (v - y0) / h * output.height]);
             }
 
 
-
-            ctx.beginPath();
+            const path = DrawPath.new();
             for (let off of xOffsets) {
                 const [, x] = off;
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
+                path.moveTo(x, 0);
+                path.lineTo(x, output.height);
             }
             for (let off of yOffsets) {
                 const [, y] = off;
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
+                path.moveTo(0, y);
+                path.lineTo(output.width, y);
             }
-            ctx.stroke();
-
-
-            ctx.restore();
+            output.drawPath(path, { fill: false, stroke: true, style });
         }
 
         if (axes.show) {
-
-            ctx.save();
 
             // compute coordinate center
             const c = cMap.convertLocalToSurface(0, 0);
@@ -1236,48 +1892,51 @@ class DiagramCanvas {
             // draw coordinate lines
             const { x, y } = axes;
             if (x.show) {
-                const { strokeStyle, lineStyle } = x;
-                ctx.strokeStyle = strokeStyle;
-                this.#applyLineStyle(lineStyle);
 
-                ctx.beginPath();
-                ctx.moveTo(0, c.y);
-                ctx.lineTo(canvas.width, c.y);
-                ctx.stroke();
-
+                {
+                    const { strokeStyle, lineStyle } = x;
+                    const style = Object.assign(Object.assign({}, strokeStyle), lineStyle);
+                    const path = DrawPath.new();
+                    path.moveTo(0, c.y);
+                    path.lineTo(output.width, c.y);
+                    output.drawPath(path, { fill: false, stroke: true, style });
+                }
                 // ticks + labels
                 const { ticks } = x;
                 if (ticks.show) {
-                    const tickOffsets = makeTicks(ticks.spacing, x0, w, false, 0, canvas.width);
+                    const tickOffsets = makeTicks(ticks.spacing, x0, w, false, 0, output.width);
 
-                    ctx.strokeStyle = ticks.strokeStyle;
-                    this.#applyLineStyle(ticks.lineStyle);
+                    const { strokeStyle = {}, lineStyle = {} } = ticks;
+                    const style = Object.assign(Object.assign({}, strokeStyle), lineStyle);
 
                     const { size } = ticks;
                     const sizeCanvas = size * cMap.scalingLocalToSurface();
-                    ctx.beginPath();
 
-                    for (let offsets of tickOffsets) {
-                        const [, o] = offsets;
-                        ctx.moveTo(o, c.y - sizeCanvas);
-                        ctx.lineTo(o, c.y + sizeCanvas);
+                    {
+                        const path = DrawPath.new();
+
+                        for (let offsets of tickOffsets) {
+                            const [, o] = offsets;
+                            path.moveTo(o, c.y - sizeCanvas);
+                            path.lineTo(o, c.y + sizeCanvas);
+                        }
+                        output.drawPath(path, { fill: false, stroke: true, style });
                     }
-                    ctx.stroke();
 
                     const { labels } = x;
                     if (labels.show) {
-                        this.#applyFontStyle(labels.textStyle);
-                        let textOffset = -sizeCanvas * 1.5;
-                        textOffset *= this.flipY ? -1 : 1;
+                        const labelStyle = Object.assign(style, labels.textStyle);
+
+                        let textOffset = sizeCanvas * 1.5;
 
                         for (let off of tickOffsets) {
                             const [ob, o] = off;
                             const txt = numberFormatter(ob);
-                            const m = ctx.measureText(txt);
-                            const offy = textOffset + m.actualBoundingBoxAscent;
-                            const offx = -m.width * 0.5;
 
-                            ctx.fillText(txt, o + offx, c.y + offy);
+                            const offy = textOffset;
+                            const offx = 0;
+
+                            output.drawText(txt, o + offx, c.y + offy, { stroke: false, fill: true, style: labelStyle });
                         }
                     }
                 }
@@ -1285,56 +1944,66 @@ class DiagramCanvas {
             }
 
             if (y.show) {
-                const { strokeStyle, lineStyle } = y;
-                ctx.strokeStyle = strokeStyle;
-                this.#applyLineStyle(lineStyle);
 
-                ctx.beginPath();
-                ctx.moveTo(c.x, 0);
-                ctx.lineTo(c.x, canvas.height);
-                ctx.stroke();
+                {
+                    const { strokeStyle, lineStyle } = y;
+                    const style = Object.assign(Object.assign({}, strokeStyle), lineStyle);
+
+
+                    const path = DrawPath.new();
+                    path.moveTo(c.x, 0);
+                    path.lineTo(c.x, output.height);
+                    output.drawPath(path, { fill: false, stroke: true, style });
+
+                }
+
 
                 // ticks + labels
                 const { ticks, labels } = y;
                 if (ticks.show) {
                     const tickOffsets = makeTicks(ticks.spacing, y0, h, this.flipY
-                        , 0, canvas.height);
+                        , 0, output.height);
 
-                    ctx.strokeStyle = ticks.strokeStyle;
-                    this.#applyLineStyle(ticks.lineStyle);
+
+                    const { strokeStyle = {}, lineStyle = {} } = ticks;
+                    const style = Object.assign(Object.assign({}, strokeStyle), lineStyle);
+
 
                     const { size } = ticks;
                     const sizeCanvas = size * cMap.scalingLocalToSurface();
-                    ctx.beginPath();
 
-                    for (let offsets of tickOffsets) {
-                        const [, o] = offsets;
-                        ctx.moveTo(c.x - sizeCanvas, o);
-                        ctx.lineTo(c.x + sizeCanvas, o);
+                    {
+                        const path = DrawPath.new();
+
+                        for (let offsets of tickOffsets) {
+                            const [, o] = offsets;
+                            path.moveTo(c.x - sizeCanvas, o);
+                            path.lineTo(c.x + sizeCanvas, o);
+                        }
+                        output.drawPath(path, { fill: false, stroke: true, style });
                     }
-                    ctx.stroke();
 
                     if (labels.show) {
-                        this.#applyFontStyle(labels.textStyle);
+
+                        const labelStyle = Object.assign(style, labels.textStyle);
+
+
                         let textOffset = -sizeCanvas * 1.5;
 
                         for (let off of tickOffsets) {
                             const [ob, o] = off;
                             const txt = numberFormatter(ob);
-                            const m = ctx.measureText(txt);
-                            const textCy = (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) * 0.5;
-                            const offy = textCy;
-                            const offx = textOffset - m.actualBoundingBoxRight;
+                            const offy = 0;
+                            const offx = textOffset;
 
-                            ctx.fillText(txt, c.x + offx, o + offy);
+                            output.drawText(txt, c.x + offx, o + offy, { stroke: false, fill: true, style: labelStyle });
                         }
                     }
                 }
             }
-
-
-            ctx.restore();
         }
+
+        output.endGroup();
     }
 
     /**
@@ -1356,22 +2025,18 @@ class DiagramCanvas {
 
         const ctx = this.context;
 
-        ctx.save();
+        const pointStyle = Object.assign({
+            fillStyle,
+            strokeStyle
+        }, outline);
 
-        ctx.fillStyle = fillStyle;
-        ctx.strokeStyle = strokeStyle;
-
-        this.#applyLineStyle(outline);
 
         ({ x, y } = this.coordinateMapper.convertLocalToSurface(x, y));
 
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, 2.0 * Math.PI);
+        const path = DrawPath.new();
+        path.arc(x, y, r, 0, 2.0 * Math.PI);
 
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-
+        this.output.drawPath(path, { fill: true, stroke: true, style: pointStyle });
     }
 
     /**
@@ -1395,32 +2060,12 @@ class DiagramCanvas {
 
         ({ x, y } = this.coordinateMapper.convertLocalToSurface(x + offset.x, y + offset.y));
 
-        const ctx = this.context;
+        const output = this.output;
 
-        ctx.save();
+        let drawStyle = Object.assign({ fillStyle, strokeStyle }, outline, textStyle);
 
-        ctx.fillStyle = fillStyle;
-        ctx.strokeStyle = strokeStyle;
-        this.#applyLineStyle(outline);
-        this.#applyFontStyle(textStyle);
+        output.drawText(text, x, y, { fill: true, stroke: true, style: drawStyle });
 
-        // split lines
-        const lines = text.split("\n");
-
-        const metrics = ctx.measureText(text);
-        let lineHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        if (!this.flipY) {
-            lineHeight *= -1;
-        }
-
-        for (let l of lines) {
-            ctx.beginPath();
-            ctx.strokeText(l, x, y);
-            ctx.fillText(l, x, y);
-            y += lineHeight;
-        }
-
-        ctx.restore();
     }
 
     /**
@@ -1454,23 +2099,20 @@ class DiagramCanvas {
 
         let { x: xl, y: yl } = cMap.convertLocalToSurface(x, y);
         ({ x: cx, y: cy } = cMap.convertLocalToSurface(cx, cy));
-        const ctx = this.context;
+        const output = this.output;
 
-        ctx.save();
+        output.beginGroup();
+        const arcStyle = Object.assign({ fillStyle: arc.fillStyle, strokeStyle: arc.strokeStyle }, arc.outline);
 
-        ctx.fillStyle = arc.fillStyle;
-        ctx.strokeStyle = arc.strokeStyle;
-        this.#applyLineStyle(arc.outline);
+        {
+            const path = DrawPath.new();
+            path.arc(xl, yl, r, cMap.convertLocalAngleToSurface(start), cMap.convertLocalAngleToSurface(angleEnd), cMap.isCounterClockwise());
+            path.lineTo(xl, yl);
+            path.close();
 
+            output.drawPath(path, { fill: true, stroke: true, style: arcStyle });
 
-
-
-        ctx.beginPath();
-        ctx.moveTo(xl, yl);
-        ctx.arc(xl, yl, r, cMap.convertLocalAngleToSurface(start), cMap.convertLocalAngleToSurface(angleEnd), cMap.isCounterClockwise());
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        }
 
         if (arc.showDirection) {
             // final point
@@ -1497,32 +2139,30 @@ class DiagramCanvas {
             ({ x: x1, y: y1 } = cMap.convertLocalToSurface(x1, y1));
             ({ x: x2, y: y2 } = cMap.convertLocalToSurface(x2, y2));
 
-            ctx.fillStyle = ctx.strokeStyle;
-            ctx.beginPath();
-            ctx.moveTo(x0, y0);
-            ctx.lineTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+            const dirStyle = Object.assign({}, arcStyle);
+            dirStyle.fillStyle = dirStyle.strokeStyle;
 
+            const dirPath = DrawPath.new();
 
+            dirPath.moveTo(x0, y0);
+            dirPath.lineTo(x1, y1);
+            dirPath.lineTo(x2, y2);
+            dirPath.close();
+
+            output.drawPath(dirPath, { fill: true, stroke: true, style: dirStyle });
         }
 
         if (text.show) {
             let txtAngle = toDeg ? rad2deg(angle) : angle;
 
             const displayText = text.transform ? text.transform(txtAngle, toDeg) : "";
-            this.#applyFontStyle(text.textStyle);
-            this.#applyLineStyle(text.outline);
+            const textStyle = Object.assign({ fillStyle: text.fillStyle, strokeStyle: text.strokeStyle }, text.textStyle, text.outline);
 
-            ctx.fillStyle = text.fillStyle;
-            ctx.strokeStyle = text.strokeStyle;
-            ctx.strokeText(displayText, cx, cy);
-            ctx.fillText(displayText, cx, cy);
+            output.drawText(displayText, cx, cy, { fill: true, stroke: true, style: textStyle });
         }
 
-        ctx.restore();
+        output.endGroup();
+
     }
 
     /**
@@ -1549,31 +2189,26 @@ class DiagramCanvas {
 
         const cMap = this.coordinateMapper;
 
-        ctx.save();
+        const arcStyle = Object.assign({ fillStyle, strokeStyle }, outline);
+        const startPoint = cMap.convertLocalToSurface(x + Math.cos(startAngle) * r, y + Math.sin(startAngle) * r);
 
-        ctx.fillStyle = fillStyle;
-        ctx.strokeStyle = strokeStyle;
-
-        this.#applyLineStyle(outline);
 
         ({ x, y } = cMap.convertLocalToSurface(x, y));
         r *= cMap.scalingLocalToSurface();
 
-        ctx.beginPath();
-        if (closeArc) {
-            ctx.moveTo(x, y);
-        }
-        ctx.arc(x, y, r,
+        const path = DrawPath.new();
+
+        path.arc(x, y, r,
             cMap.convertLocalAngleToSurface(startAngle),
             cMap.convertLocalAngleToSurface(endAngle),
             cMap.isCounterClockwise());
 
         if (closeArc) {
-            ctx.closePath();
+            path.lineTo(x, y);
+            path.close();
         }
-        ctx.stroke();
-        ctx.fill();
-        ctx.restore();
+
+        this.output.drawPath(path, { fill: true, stroke: true, style: arcStyle });
 
     }
 
@@ -1605,38 +2240,32 @@ class DiagramCanvas {
             closeArc,
         } = style;
 
-        const ctx = this.context;
+        const { output } = this;
 
         const cMap = this.coordinateMapper;
-        ctx.save();
 
-        ctx.fillStyle = fillStyle;
-        ctx.strokeStyle = strokeStyle;
-
-        this.#applyLineStyle(outline);
+        const ellipseStyle = Object.assign({ fillStyle, strokeStyle }, outline);
 
         ({ x, y } = cMap.convertLocalToSurface(x, y));
         rx *= cMap.scalingLocalToSurface();
         ry *= cMap.scalingLocalToSurface();
 
-        ctx.beginPath();
+        const path = DrawPath.new();
 
         if (closeArc) {
-            ctx.moveTo(x, y);
+            path.moveTo(x, y);
         }
 
-        ctx.ellipse(x, y, rx, ry,
+        path.ellipse(x, y, rx, ry,
             cMap.convertLocalAngleToSurface(rotation),
             cMap.convertLocalAngleToSurface(startAngle),
             cMap.convertLocalAngleToSurface(endAngle),
             cMap.isCounterClockwise());
 
         if (closeArc) {
-            ctx.closePath();
+            path.closePath();
         }
-        ctx.stroke();
-        ctx.fill();
-        ctx.restore();
+        output.drawPath(path, { fill: true, stroke: true, style: ellipseStyle });
 
     }
 
@@ -1662,27 +2291,18 @@ class DiagramCanvas {
         } = style;
 
 
-        const ctx = this.context;
+        const { output } = this;
 
         const cMap = this.coordinateMapper;
 
-        ctx.save();
-
-        ctx.strokeStyle = strokeStyle;
-        this.#applyLineStyle(lineStyle, styles.geo.line.lineStyle);
+        const drawStyle = Object.assign({ strokeStyle }, lineStyle);
 
         const { p0, p1 } = clipLineAtScreen(this.coordinateMapper, x0, y0, x1, y1, leftOpen, rightOpen);
 
         ({ x: x0, y: y0 } = cMap.convertLocalToSurface(p0.x, p0.y));
         ({ x: x1, y: y1 } = cMap.convertLocalToSurface(p1.x, p1.y));
 
-        ctx.beginPath();
-
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-
-        ctx.stroke();
-        ctx.restore();
+        output.drawLine(x0, y0, x1, y1, { fill: false, stroke: true, style: drawStyle });
     }
 
     /**
@@ -1704,49 +2324,46 @@ class DiagramCanvas {
         } = style;
 
 
-        const ctx = this.context;
+        const { output } = this;
 
         const cMap = this.coordinateMapper;
 
-        ctx.save();
+        const drawStyle = Object.assign({ strokeStyle }, lineStyle);
 
-        ctx.strokeStyle = strokeStyle;
-        this.#applyLineStyle(lineStyle, styles.geo.line.lineStyle);
 
         const pointsScreen = points.map(v => cMap.convertLocalToSurface(v.x, v.y));
 
-        ctx.beginPath();
+        const path = DrawPath.new();
         if (pointsScreen.length === 2) {
             // just a line
             const [p0, p1] = pointsScreen;
-            ctx.moveTo(p0.x, p0.y);
-            ctx.lineTo(p1.x, p1.y);
+            path.moveTo(p0.x, p0.y);
+            path.lineTo(p1.x, p1.y);
         }
         else if (pointsScreen.length === 3) {
             const [p0, p1, p2] = pointsScreen;
             // quadratic curve
-            ctx.moveTo(p0.x, p0.y);
-            ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
+            path.moveTo(p0.x, p0.y);
+            path.quadraticBezier(p1.x, p1.y, p2.x, p2.y);
 
         } else if (pointsScreen.length === 4) {
             const [p0, p1, p2, p3] = pointsScreen;
             // quadratic curve
-            ctx.moveTo(p0.x, p0.y);
-            ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+            path.moveTo(p0.x, p0.y);
+            path.cubicBezier(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
         } else {
             // create subdivision curve
             // error metric is adjustable, but can go down to a pixel
             const eps = Math.max(1, this.subdivisionThreshold);
             const pointsSub = subdivideBezierAdaptive(pointsScreen, eps);
-            ctx.moveTo(pointsSub[0].x, pointsSub[0].y);
+            path.moveTo(pointsSub[0].x, pointsSub[0].y);
             for (let i = 1; i < pointsSub.length; i++) {
                 const pi = pointsSub[i];
-                ctx.lineTo(pi.x, pi.y);
+                path.lineTo(pi.x, pi.y);
             }
         }
 
-        ctx.stroke();
-        ctx.restore();
+        output.drawPath(path, { fill: false, stroke: true, style: drawStyle });
     }
     /**
      * Draws a Bezier spline
@@ -1772,36 +2389,33 @@ class DiagramCanvas {
             lineStyle,
         } = style;
 
+        const drawStyle = Object.assign({ strokeStyle }, lineStyle);
 
-        const ctx = this.context;
+        const { output } = this;
 
         const cMap = this.coordinateMapper;
 
-        ctx.save();
-
-        ctx.strokeStyle = strokeStyle;
-        this.#applyLineStyle(lineStyle, styles.geo.line.lineStyle);
 
         const pointsScreen = points.map(v => cMap.convertLocalToSurface(v.x, v.y));
 
-        ctx.beginPath();
-        ctx.moveTo(pointsScreen[0].x, pointsScreen[0].y);
+        const path = DrawPath.new();
+        path.moveTo(pointsScreen[0].x, pointsScreen[0].y);
 
         for (let i = 1; i < pointsScreen.length; i += degree) {
             if (degree === 1) {
                 // just a line
                 const [p1] = [pointsScreen[i]];
-                ctx.lineTo(p1.x, p1.y);
+                path.lineTo(p1.x, p1.y);
             }
             else if (degree === 2) {
                 const [p1, p2] = [pointsScreen[i], pointsScreen[i + 1]];
                 // quadratic curve
-                ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y);
+                path.quadraticBezier(p1.x, p1.y, p2.x, p2.y);
 
             } else if (degree === 3) {
                 const [p1, p2, p3] = [pointsScreen[i], pointsScreen[i + 1], pointsScreen[i + 2]];
                 // cubic curve
-                ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+                path.cubicBezier(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
             }
             else {
                 const subPoints = [];
@@ -1815,14 +2429,12 @@ class DiagramCanvas {
                 // move already done by previous segment/first point
                 for (let i = 1; i < pointsSub.length; i++) {
                     const pi = pointsSub[i];
-                    ctx.lineTo(pi.x, pi.y);
+                    path.lineTo(pi.x, pi.y);
                 }
             }
         }
 
-
-        ctx.stroke();
-        ctx.restore();
+        output.drawPath(path, { fill: false, stroke: true, style: drawStyle });
     }
 
     /**
@@ -1842,31 +2454,24 @@ class DiagramCanvas {
             strokeStyle = "rgb(0,0,0)",
             lineStyle,
         } = style;
+        const drawStyle = Object.assign({ strokeStyle }, lineStyle);
 
 
-        const ctx = this.context;
+        const { output } = this;
 
         const cMap = this.coordinateMapper;
 
-        ctx.save();
-
-        ctx.strokeStyle = strokeStyle;
-        this.#applyLineStyle(lineStyle, styles.geo.line.lineStyle);
-
-
-
-        ctx.beginPath();
+        const path = DrawPath.new();
 
         const p0 = cMap.convertLocalToSurface(points[0].x, points[0].y);
-        ctx.moveTo(p0.x, p0.y);
+        path.moveTo(p0.x, p0.y);
         for (let i = 1; i < points.length; i++) {
             let pi = points[i];
             pi = cMap.convertLocalToSurface(pi.x, pi.y);
-            ctx.lineTo(pi.x, pi.y);
+            path.lineTo(pi.x, pi.y);
         }
 
-        ctx.stroke();
-        ctx.restore();
+        output.drawPath(path, { fill: false, stroke: true, style: drawStyle });
     }
 
     /**
@@ -1888,31 +2493,25 @@ class DiagramCanvas {
             lineStyle,
         } = style;
 
+        const drawStyle = Object.assign({ strokeStyle, fillStyle }, lineStyle);
 
-        const ctx = this.context;
+        const { output } = this;
 
         const cMap = this.coordinateMapper;
 
-        ctx.save();
-
-        ctx.strokeStyle = strokeStyle;
-        ctx.fillStyle = fillStyle;
-        this.#applyLineStyle(lineStyle, styles.geo.line.lineStyle);
-
-        ctx.beginPath();
+        const path = DrawPath.new();
 
         const p0 = cMap.convertLocalToSurface(points[0].x, points[0].y);
-        ctx.moveTo(p0.x, p0.y);
+        path.moveTo(p0.x, p0.y);
         for (let i = 1; i < points.length; i++) {
             let pi = points[i];
             pi = cMap.convertLocalToSurface(pi.x, pi.y);
-            ctx.lineTo(pi.x, pi.y);
+            path.lineTo(pi.x, pi.y);
         }
 
-        ctx.closePath();
-        ctx.stroke();
-        ctx.fill();
-        ctx.restore();
+        path.close();
+
+        output.drawPath(path, { fill: true, stroke: true, style: drawStyle });
     }
 
     /**
@@ -1932,7 +2531,8 @@ class DiagramCanvas {
             arrow,
         } = style;
 
-        const ctx = this.context;
+        const { output } = this;
+        output.beginGroup();
 
         const cMap = this.coordinateMapper;
 
@@ -1971,31 +2571,27 @@ class DiagramCanvas {
             lineEndY = y1 - arrow.length * dy / d;
         }
 
-        ctx.save();
 
+        {
+            const drawStyle = Object.assign({ strokeStyle: shaft.strokeStyle }, shaft.lineStyle);
+            //arrow shaft
+            output.drawLine(x0, y0, lineEndX, lineEndY, { fill: false, stroke: true, style: drawStyle });
+        }
 
-        this.#applyLineStyle(shaft.lineStyle);
-        ctx.strokeStyle = shaft.strokeStyle;
-        //arrow shaft
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(lineEndX, lineEndY);
-        ctx.stroke();
+        {
+            const drawStyle = Object.assign({ strokeStyle: shaft.strokeStyle, fillStyle: arrow.fillStyle }, shaft.lineStyle);
 
-        this.#applyLineStyle(arrow.lineStyle);
-        // arrow head
-        ctx.strokeStyle = arrow.strokeStyle;
-        ctx.fillStyle = arrow.fillStyle;
+            const path = DrawPath.new();
+            path.moveTo(x1, y1);
+            path.lineTo(lineEndX + nx, lineEndY + ny);
+            path.lineTo(lineEndX - nx, lineEndY - ny);
+            path.close();
 
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(lineEndX + nx, lineEndY + ny);
-        ctx.lineTo(lineEndX - nx, lineEndY - ny);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+            output.drawPath(path, { fill: true, stroke: true, style: drawStyle });
+        }
 
-        ctx.restore();
+        output.endGroup();
+
     }
 }
 
@@ -2279,12 +2875,44 @@ function createDiagramCanvasDrawFuncRegistry() {
             startAngle, endAngle,
             rotation, props.style);
     }
-   
+
     const reg = new DrawFuncRegistry({ typedDrawFuncs: tf });
 
     return reg;
 }
 
+/**
+ * Draws a scene to a given diagram
+ * @param {GeometryScene} scene The scene to be drawn
+ * @param {DiagramCanvas} diagram The diagram to write into
+ * @param {Object} params
+ * @param {DrawFuncRegistry} [params.drawFunc] A registry of drawing functions. Uses default implementation, if not given
+ * @param {Object} [parmas.bg] The background definition. Defaults to NO_BACKGROUND_CONFIG if not given
+ */
+function drawSceneToDiagram(scene, diagram, {
+    drawFuncRegistry = createDiagramCanvasDrawFuncRegistry(),
+    bg = NO_BACKGROUND_CONFIG,
+}) {
+    diagram.begin();
+    diagram.drawBackground(bg);
+    const drawables = sortDrawables(scene);
+
+    for (let i = 0; i < drawables.length; i++) {
+        const { value, properties } = drawables[i];
+        const draw = Array.isArray(value) ? value : [value];
+        for (let j = 0; j < draw.length; j++) {
+            const obj = draw[j];
+            drawFuncRegistry.draw(diagram, obj, properties);
+        }
+    }
+    diagram.end();
+
+}
+
+/**
+ * Handles painting and updating a diagram
+ * Additionally this can handle resizing the output based on some element
+ */
 class DiagramPainter extends ScenePainter {
 
     #resizeObserver;
@@ -2305,7 +2933,7 @@ class DiagramPainter extends ScenePainter {
      * @param {Boolean} [options.autoResize.keepAspect = false] If true, the autoresize will keep the previous aspect ratio, if false not
      */
     constructor(scene, diagram, {
-        drawFuncRegistry = createDiagramCanvasDrawFuncRegistry(diagram),
+        drawFuncRegistry = createDiagramCanvasDrawFuncRegistry(),
         bg = NO_BACKGROUND_CONFIG,
         autoResize = null,
     } = {}) {
@@ -2314,21 +2942,10 @@ class DiagramPainter extends ScenePainter {
         this.drawFuncRegistry = drawFuncRegistry;
         this.#diagram = diagram;
 
-        this.#currentSize = [diagram.canvas.width, diagram.canvas.height];
+        this.#currentSize = [diagram.output.width, diagram.output.height];
 
         this.setDrawFunc((s) => {
-            this.#diagram.clear();
-            this.#diagram.drawBackground(this.bg);
-            const drawables = sortDrawables(s);
-
-            for (let i = 0; i < drawables.length; i++) {
-                const { value, properties } = drawables[i];
-                const draw = Array.isArray(value) ? value : [value];
-                for (let j = 0; j < draw.length; j++) {
-                    const obj = draw[j];
-                    this.drawFuncRegistry.draw(this.#diagram, obj, properties);
-                }
-            }
+            drawSceneToDiagram(s, this.#diagram, { bg: this.bg, drawFuncRegistry: this.drawFuncRegistry });
         });
 
         if (autoResize) {
@@ -2342,7 +2959,6 @@ class DiagramPainter extends ScenePainter {
             if (!target) {
                 throw new Error("Container must be specified for auto resize");
             }
-
             this.#resizeObserver = new ResizeObserver((entries) => {
                 for (const entry of entries) {
                     if (entry.target === target) {
@@ -2355,7 +2971,7 @@ class DiagramPainter extends ScenePainter {
                         if (w < minWidth) {
                             return;
                         }
-                        const canvas = this.#diagram.canvas;
+                        const canvas = this.#diagram.output;
                         canvas.width = w;
                         if (keepAspect) {
                             canvas.height = w / curAspect;
@@ -2387,10 +3003,14 @@ export {
     ScenePainter,
     DiagramPainter,
     DrawFuncRegistry,
+    PathOutput,
+    CanvasPathOutput,
+    SvgPathOutput,
     createDiagramCanvasDrawFuncRegistry,
     clientPositionToLocal,
     mouseEventToPosition,
     makeTicks,
+    drawSceneToDiagram,
     styles,
     NO_BACKGROUND_CONFIG,
     BASIC_BACKGROUND_CONFIG,

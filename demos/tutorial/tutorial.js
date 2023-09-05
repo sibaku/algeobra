@@ -13,6 +13,37 @@ import {
     makeCheckbox,
 } from "../common.js";
 
+function makeSVGButton(scene, diagram, container, { bg = vis.NO_BACKGROUND_CONFIG } = {}) {
+
+
+    const but = document.createElement("button");
+    but.innerText = "Save to SVG";
+    but.onclick = () => {
+        const { x0, y0, x1, y1, flipY } = diagram.coordinateMapper;
+        const output = new vis.SvgPathOutput(diagram.output.width, diagram.output.width / diagram.output.height);
+        const diagSVG = new vis.DiagramCanvas({ x0, y0, x1, y1, flipY, canvas: output });
+
+        vis.drawSceneToDiagram(scene, diagSVG, { bg });
+        const d = output.document;
+
+        const contentType = "image/svg+xml;charset=utf-8";
+        const blob = new Blob([d], { type: contentType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "diagram.svg");
+        document.body.appendChild(link);
+
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    container.appendChild(makeContainer(but));
+    return but;
+
+}
+
+
 function controllableRectangle(container, canvas) {
 
     // get some fields for easier writing 
@@ -78,7 +109,7 @@ function controllableRectangle(container, canvas) {
     });
 
     // we want the user to be able to move these points
-    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, diagram.canvas,
+    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, canvas,
         [p0, p2], 40);
 
     // we specify a direction, this will be the base axis of our rectangle
@@ -147,6 +178,8 @@ function controllableRectangle(container, canvas) {
     const textLengths = distances.map(
         (v, i) => scene.add(new DefText(), DefText.fromObjectRef({ obj: v, ref: midpoints[i] }),
             { style: textStyle }));
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
+
 }
 
 function reflectionRefraction(container, canvas) {
@@ -246,7 +279,7 @@ function reflectionRefraction(container, canvas) {
 
     // we want the user to be able to move the handle
     // we pass pairs of handles and moveable points to the helper function
-    const manip = vis.PointManipulator.createForPointsAndHandles(scene, diagram.coordinateMapper, diagram.canvas,
+    const manip = vis.PointManipulator.createForPointsAndHandles(scene, diagram.coordinateMapper, canvas,
         [[arcPoint, handlePoint]], 40);
     // you can now drag the point along the arc!
 
@@ -483,6 +516,8 @@ function reflectionRefraction(container, canvas) {
 
     container.appendChild(makeContainer(makeTextField("\u03b7\u2081: "), slider0));
     container.appendChild(makeContainer(makeTextField("\u03b7\u2082: "), slider1));
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
+
 }
 
 function pythagoras(container, canvas) {
@@ -581,7 +616,7 @@ function pythagoras(container, canvas) {
     });
 
     // we want the user to be able to move these points
-    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, diagram.canvas,
+    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, canvas,
         [p0, p2], 40);
 
     // make a polygon to display the triangle
@@ -715,6 +750,9 @@ function pythagoras(container, canvas) {
             }
         }
     ));
+
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
+
 }
 
 function sat(container, canvas) {
@@ -848,7 +886,7 @@ function sat(container, canvas) {
     const handleMoves = [[circlePoint, handlePoint]];
     [...pointsP, ...pointsQ].forEach(v => handleMoves.push([v, v]));
 
-    const manip = vis.PointManipulator.createForPointsAndHandles(scene, diagram.coordinateMapper, diagram.canvas, handleMoves, 40);
+    const manip = vis.PointManipulator.createForPointsAndHandles(scene, diagram.coordinateMapper, canvas, handleMoves, 40);
 
     // we will now create a the line at our circle point
     // for that, we use the radius vector from the circle center to the handle point and attach a perpendicular line
@@ -1104,6 +1142,9 @@ function sat(container, canvas) {
             }
         }
     });
+
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
+
 }
 
 function smoothFunction(container, canvas) {
@@ -1218,6 +1259,7 @@ function smoothFunction(container, canvas) {
 
     container.appendChild(makeContainer(makeTextField("Amplitude: "), slider0));
     container.appendChild(makeContainer(makeTextField("#Samples: "), slider1));
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
 
 }
 
@@ -1309,7 +1351,7 @@ function coordinateSystems(container, canvas) {
     };
     const lineU = scene.add(new DefLine(), DefLine.fromPoints(origin0, p1), lowerLineProps);
     const lineV = scene.add(new DefLine(), DefLine.fromPoints(origin0, p2), lowerLineProps);
-    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, diagram.canvas,
+    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, canvas,
         [origin0, p1, p2], 40);
 
     // helper to make coordinate system style
@@ -1577,6 +1619,8 @@ function coordinateSystems(container, canvas) {
     options.appendChild(localVector);
 
     container.appendChild(options);
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
+
 }
 
 function bezierSegment(container, canvas) {
@@ -1660,7 +1704,7 @@ function bezierSegment(container, canvas) {
     });
 
     // we want the user to be able to move these points
-    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, diagram.canvas,
+    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, canvas,
         points, 40);
 
     // the full curve
@@ -1792,6 +1836,8 @@ function bezierSegment(container, canvas) {
 
     container.appendChild(makeContainer(makeTextField("t0:"), sliderT0, t0SliderText));
     container.appendChild(makeContainer(makeTextField("t1:"), sliderT1, t1SliderText));
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
+
 }
 
 
