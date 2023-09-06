@@ -1586,6 +1586,42 @@ function removeColinear(lines, eps = 1E-10) {
     }
     return output;
 }
+
+/**
+ * Removes zero length line segments, which cause issues in some algorithms
+ * @param {Array<{x:Number,y:Number}>} lines Line segments
+ * @param {Object} params
+ * @param {Boolean} [params.isPolygon] Whether the lines represent a closed polygon (implicit final line segment)
+ * @param {Number} [params.eps] The epsilon value to use in comparisons
+ * @returns {Array<{x:Number,y:Number}>} The line segments without zero segments
+ */
+function removeZeroSegments(lines, { isPolygon = false, eps = 1E-10 } = {}) {
+    if (lines.length === 0) {
+        return [];
+    }
+    const output = [lines[0]];
+    for (let i = 1; i < lines.length; i++) {
+        const pi = lines[i];
+        const pl = output[output.length - 1];
+        const u = vSub(pl, pi);
+        if (Vec2.len2(u) > eps) {
+            // non-zero edge
+            output.push(pi);
+        }
+    }
+
+    if (isPolygon && output.length > 1) {
+        const pi = output[output.length - 1];
+        const pl = output[0];
+        const u = vSub(pl, pi);
+        if (Vec2.len2(u) < eps) {
+            // last implicit edge is zero edge
+            output.pop();
+        }
+    }
+    return output;
+}
+
 /**
  * Computes the convex hull of the given points
  * @param {Array<{x:Number,y:Number}>} points The input points
@@ -1595,8 +1631,6 @@ function calcConvexHull(points) {
     // gift wrapping algorithm from "Computational Geometry in C"
     // TODO use more efficient algorithm like Graham or incremental
 
-
-    points = removeColinear(points);
     if (points.length < 4) {
         // 2 non-colinear points are a line, which is its own convex hull
         // 3 non-colinear points are a triangle, which is its own convex hull
@@ -1638,10 +1672,9 @@ function calcConvexHull(points) {
             }
             const edge = vSub(points[j], curPoint);
             // skip zero length
-            // should have been removed by the colinearity check
-            // if (vLen2(edge) < 1E-10) {
-            //     continue;
-            // }
+            if (vLen2(edge) < 1E-10) {
+                continue;
+            }
             const a = orientedAngle(prevEdge, edge);
             if (a < minAngle) {
                 minAngle = a;
@@ -1653,7 +1686,7 @@ function calcConvexHull(points) {
         output.push(nextPoint);
         i = minIndex;
     } while (i !== i0);
-    return output;
+    return removeZeroSegments(removeColinear(output), { isPolygon: true });
 }
 
 /**
@@ -8074,7 +8107,7 @@ class DefTangentLines {
 class DefMidPoint {
     /**
      * Computes the midpoint of an object
-     * @param {Number | Object} obj Either the index or value of one of [TYPE_POINT, TYPE_LINE, TYPE_ARC, TYPE_ELLIPSE] or an array of TYPE_POINT
+     * @param {Number | Object} obj Either the index or value of one of [TYPE_POINT, TYPE_LINE, TYPE_ARC, TYPE_ELLIPSE,TYPE_POLYGON] or an array of TYPE_POINT
      * @returns {CreateInfo} The creation info
      */
     static fromObject(obj) {
@@ -8087,6 +8120,26 @@ class DefMidPoint {
      */
     static fromPoints(...points) {
         return CreateInfo.new("p", [...points]);
+    }
+
+    computeMidpointPoints(points) {
+        let x = 0;
+        let y = 0;
+
+        if (points.length < 1) {
+            return { x: Infinity, y: Infinity };
+        }
+
+        for (let i = 0; i < points.length; i++) {
+            const oi = points[i];
+            x += oi.x;
+            y += oi.y;
+        }
+
+        x /= points.length;
+        y /= points.length;
+
+        return Vec2.new(x, y);
     }
 
     /**
@@ -8102,25 +8155,12 @@ class DefMidPoint {
 
             // Allow for computing the midpoint of a set of points
             if (Array.isArray(obj)) {
-                let x = 0;
-                let y = 0;
-
-                let n = 0;
                 for (let i = 0; i < obj.length; i++) {
                     const oi = obj[i];
-                    if (oi.type === TYPE_POINT) {
-                        x += oi.x;
-                        y += oi.y;
-                        n++;
-                    } else {
-                        throw new Error(`MidPoint of array defined for points only`);
-                    }
+                    assertType(oi, TYPE_POINT)
                 }
 
-                x /= n;
-                y /= n;
-
-                return makePoint({ x, y });
+                return makePoint(this.computeMidpointPoints(obj));
             }
             else if (obj.type === TYPE_POINT) {
                 return obj;
@@ -8137,6 +8177,8 @@ class DefMidPoint {
                 return makePoint(obj.center);
             } else if (obj.type === TYPE_ELLIPSE) {
                 return makePoint(obj.center);
+            } else if (obj.type === TYPE_POLYGON) {
+                return makePoint(this.computeMidpointPoints(obj.points))
             }
             throw new Error(`Object type not supported`);
 
@@ -8540,6 +8582,18 @@ class DefPolygon {
     }
 
     /**
+    * Computes a polygon by clipping another polygon at a convex clip polygon
+    * @param {Number | Object | Array<Number> | Array<Object>} points Either the index or value of a TYPE_POINT or array of TYPE_POINT values. Parameter can be an array of such values. The points form which to compute the convex hull
+    * @returns {CreateInfo} The creation info
+    */
+    static fromConvexHull(points) {
+        if (!Array.isArray(points)) {
+            points = [points];
+        }
+        return CreateInfo.new("cnv", points);
+    }
+
+    /**
      * Computes the polygon
      * @param {CreateInfo} createInfo The creation info
      * @returns {Object} A polygon of type TYPE_POLYGON
@@ -8616,6 +8670,35 @@ class DefPolygon {
             assertType(clipPoly, TYPE_POLYGON);
 
             points = clipPolygonAtPolygon(poly.points, clipPoly.points);
+        } else if (createInfo.name === "cnv") {
+            const input = dependencies;
+            assertExistsAndNotOptional(input);
+
+            // must be an array
+            if (!Array.isArray(input)) {
+                return INVALID;
+            }
+
+            const finalPoints = [];
+            for (let i = 0; i < input.length; i++) {
+                const pi = input[i];
+                if (Array.isArray(pi)) {
+                    for (let j = 0; j < pi.length; j++) {
+                        const pj = pi[j];
+                        assertExistsAndNotOptional(pj);
+                        assertType(pj, TYPE_POINT);
+                        finalPoints.push(pj);
+                    }
+                } else {
+                    assertExistsAndNotOptional(pi);
+                    assertType(pi, TYPE_POINT);
+                    finalPoints.push(pi);
+                }
+            }
+            points = calcConvexHull(finalPoints);
+            if (points.length < 3) {
+                return INVALID;
+            }
         }
         else if (createInfo !== EMPTY_INFO) {
             throw new Error("No suitable constructor");
@@ -10634,7 +10717,7 @@ export {
     computePlane,
     clipPolygonAtPlane,
     clipPolygonAtPolygon,
-
+    removeZeroSegments,
     // classes
     Vec2,
     Complex,
