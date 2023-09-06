@@ -188,6 +188,103 @@ function demoAddition(container, canvas) {
     makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
 }
 
+function demoMinkowskiDifference(container, canvas) {
+
+    const scene = new alg.GeometryScene();
+    const diagram = new vis.DiagramCanvas({ x0: -3, y0: -3, x1: 3, y1: 3, flipY: true, canvas });
+    const diagPainter = new vis.DiagramPainter(scene, diagram, {
+        bg: vis.BASIC_BACKGROUND_CONFIG,
+        autoResize: {
+            target: container,
+            keepAspect: false,
+            minWidth: canvas.width / 2,
+            widthFactor: 0.8,
+        }
+    });
+
+
+    const invisible = true;
+
+
+    const pointStyleA = { r: 8, fillStyle: "rgb(200,0,0)" };
+    const polyStyleA = { fillStyle: "rgba(200,0,0,0.5)", strokeStyle: "rgb(200,0,0)" };
+    const pointStyleB = { r: 8, fillStyle: "rgb(0,0,200)" };
+    const polyStyleB = { fillStyle: "rgba(0,0,200,0.5)", strokeStyle: "rgb(0,0,200)" };
+
+    const pointStyleC = { r: 4, fillStyle: "rgba(200,0,200,0.5)" };
+    const polyStyleC = { fillStyle: "rgba(200,0,200,0.25)", strokeStyle: "rgba(200,0,200,0.5)" };
+
+
+
+    const pointsA = [];
+    const pointsB = [];
+
+    pointsA.push(scene.add(new alg.DefPoint(-2, -1), EMPTY_INFO, { style: pointStyleA }));
+    pointsA.push(scene.add(new alg.DefPoint(-1, -2), EMPTY_INFO, { style: pointStyleA }));
+    pointsA.push(scene.add(new alg.DefPoint(3, 0), EMPTY_INFO, { style: pointStyleA }));
+    pointsA.push(scene.add(new alg.DefPoint(1, 0), EMPTY_INFO, { style: pointStyleA }));
+
+    pointsB.push(scene.add(new alg.DefPoint(1, -2), EMPTY_INFO, { style: pointStyleB }));
+    pointsB.push(scene.add(new alg.DefPoint(3, -2), EMPTY_INFO, { style: pointStyleB }));
+    pointsB.push(scene.add(new alg.DefPoint(4, -1), EMPTY_INFO, { style: pointStyleB }));
+    pointsB.push(scene.add(new alg.DefPoint(3, -1), EMPTY_INFO, { style: pointStyleB }));
+
+    const polyA = scene.add(new alg.DefPolygon(), alg.DefPolygon.fromConvexHull(pointsA), { style: polyStyleA });
+    const polyB = scene.add(new alg.DefPolygon(), alg.DefPolygon.fromConvexHull(pointsB), { style: polyStyleB });
+
+    const pointsC = scene.add(new alg.DefFunc(deps => {
+        const { polyA, polyB } = deps;
+        const pa = polyA.points;
+        const pb = polyB.points;
+
+        const result = [];
+        for (let i = 0; i < pa.length; i++) {
+            const pi = pa[i];
+            for (let j = 0; j < pb.length; j++) {
+                const pj = pb[j];
+                const p = Vec2.sub(pi, pj);
+                result.push(alg.makePoint(p));
+            }
+        }
+        return result;
+
+    }), alg.DefFunc.from({ polyA, polyB }), { style: pointStyleC });
+    const polyC = scene.add(new alg.DefPolygon(), alg.DefPolygon.fromConvexHull(pointsC), { style: polyStyleC });
+
+    const midA = scene.add(new alg.DefMidPoint(), alg.DefMidPoint.fromObject(polyA), { invisible });
+    const midB = scene.add(new alg.DefMidPoint(), alg.DefMidPoint.fromObject(polyB), { invisible });
+    const midC = scene.add(new alg.DefMidPoint(), alg.DefMidPoint.fromObject(polyC), { invisible });
+
+
+    const textProps = {
+        style: {
+            strokeStyle: "rgb(255,255,255)",
+            fillStyle: "black",
+            textStyle: {
+                font: "bold 20px sans-serif",
+                textAlign: "middle",
+            },
+            outline: {
+                lineWidth: 4,
+            }
+        }
+    };
+
+    const textA = scene.add(new alg.DefText({ text: "A" }), alg.DefText.fromObjectRef({ ref: midA }), textProps);
+    const textB = scene.add(new alg.DefText({ text: "B" }), alg.DefText.fromObjectRef({ ref: midB }), textProps);
+    const textC = scene.add(new alg.DefText({ text: "A-B" }), alg.DefText.fromObjectRef({ ref: midC }), textProps);
+
+    const manip = vis.PointManipulator.createForPoints(scene, diagram.coordinateMapper, canvas, [...pointsA, ...pointsB], 40);
+
+    onRemoved(canvas, () => {
+        manip.detach();
+        diagPainter.disconnect();
+    });
+
+    makeSVGButton(scene, diagram, container, { bg: diagPainter.bg });
+}
+
+
 function demoScale(container, canvas) {
     const scene = new alg.GeometryScene();
 
@@ -2971,4 +3068,5 @@ export {
     demoCurveTangentNormals,
     demoDetectGround,
     demoClip,
+    demoMinkowskiDifference,
 };
