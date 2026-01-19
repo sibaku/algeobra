@@ -772,6 +772,11 @@ const TYPE_TEXT = "text";
 const TYPE_COLLECTION = "collection";
 
 /**
+ * Type specifier for a general value type
+ */
+const TYPE_VALUE = "val";
+
+/**
  * Specifies an INVALID value
  * This could be something like the intersection of objects that do not intersect
  */
@@ -1378,6 +1383,19 @@ function makeCollection(objects, properties) {
 }
 
 /**
+ * Creates a value type object of type TYPE_VALUE
+ * Any object that has the following fields can be treated as a value:
+ * { value, type = TYPE_VALUE }
+ * @param {*} value The value
+ * @returns {{value : Number, type: String}}
+ */
+function makeValue(value) {
+    return {
+        value, type: TYPE_VALUE
+    };
+}
+
+/**
  * Converts an object into readable text
  * @param {*} obj The object to stringify
  * @param {Object} params
@@ -1422,6 +1440,8 @@ function objectToString(obj, {
         return `Arc(${formatter.format(r)}, (${formatter.format(center.x)}, ${formatter.format(center.y)}), ${formatter.format(startAngle)}°,${formatter.format(endAngle)}°)`;
     } else if (obj.type === TYPE_TEXT) {
         return formatter.format(obj.text);
+    } else if (obj.type === TYPE_VALUE) {
+        return obj.value.toString();
     }
 
 
@@ -5914,7 +5934,7 @@ class DefPolarVector {
             assertExistsAndNotOptional(angle);
             assertType(angle, TYPE_ANGLE);
 
-            const { value, start } = angle;
+            let { value, start } = angle;
 
             ref = angle.ref;
             if (!isParamEmpty(rn)) {
@@ -6038,6 +6058,60 @@ class DefNumber {
         return makeNumber(value);
     }
 }
+
+
+/**
+ * Definition of a simple number. Creates an object of TYPE_NUMBER
+ */
+class DefValue {
+    /**
+     * Default value
+     * @param {*} val The value
+     */
+    constructor(val) {
+        this.value = val;
+    }
+
+    /**
+     * Extract a field from a given object and make a value out of it.
+     * If no such field exists, INVALID will be created
+     * @param {Number | Object} obj The object of which the value is extracted
+     * @param {*} key The key
+     * @param {Function} [transform] A transform taking the value obj[key], if it exists and returns a new one
+     * @returns {CreateInfo} The creation info
+     */
+    static fromField(obj, key, transform = null) {
+        return CreateInfo.new("ok", { obj }, { key, transform });
+    }
+
+    /**
+     * Creates the number
+     * @param {CreateInfo} createInfo The creation info
+     * @returns {Object} An object of TYPE_NUMBER or INVALID
+     */
+    compute(createInfo) {
+        let { value } = this;
+        const { dependencies } = createInfo;
+        if (createInfo.name === "ok") {
+            const { obj } = dependencies;
+            assertExistsAndNotOptional(obj);
+            const { key, transform } = createInfo.params;
+            value = obj[key];
+            if (value === undefined) {
+                return INVALID;
+            }
+
+            if (transform && transform instanceof Function) {
+                value = transform(value);
+            }
+
+        } else if (createInfo !== EMPTY_INFO) {
+            throw new Error("No suitable constructor");
+        }
+        return makeValue(value);
+    }
+}
+
 
 /**
  * Definition of a boolean value of type TYPE_BOOLEAN
@@ -10643,6 +10717,7 @@ export {
     TYPE_BEZIER_SPLINE,
     TYPE_TEXT,
     TYPE_COLLECTION,
+    TYPE_VALUE,
     INVALID,
     EMPTY,
     EMPTY_INFO,
@@ -10676,6 +10751,7 @@ export {
     makeEllipse,
     makeText,
     makeCollection,
+    makeValue,
     objectToString,
     normalizeAngle,
     calcAngle,
@@ -10768,6 +10844,7 @@ export {
     DefIntersection,
     DefArray,
     DefInterpolate,
+    DefValue,
     EventType,
     DefinitionUpdateEvent,
     DefinitionRemovedEvent,
